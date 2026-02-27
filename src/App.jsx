@@ -9,7 +9,9 @@ import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged }
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // --- FIREBASE INITIALIZATION ---
-const firebaseConfig = {
+// Hybrid config: Uses internal environment variables here, but falls back to your real keys when deployed on Vercel
+const isPreviewEnv = typeof __firebase_config !== 'undefined' && __firebase_config;
+const firebaseConfig = isPreviewEnv ? JSON.parse(__firebase_config) : {
   apiKey: "AIzaSyAW3I1jRHHzkLHRVQ_BU6wsZfnpphqPNOs",
   authDomain: "exambuilder-2e28c.firebaseapp.com",
   projectId: "exambuilder-2e28c",
@@ -21,7 +23,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = "examBuilder-production";
+const appId = typeof __app_id !== 'undefined' ? __app_id : "examBuilder-production";
 
 // --- FALLBACK MOCK DATA FOR SEEDING ---
 const DEFAULT_EXAM = {
@@ -233,7 +235,11 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        await signInAnonymously(auth);
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
       } catch (error) {
         console.error("Auth init error:", error);
       }
