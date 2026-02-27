@@ -8,8 +8,14 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
+// --- CONFIGURATION ---
+// Add the emails of anyone who should have Teacher Admin access here:
+const ADMIN_EMAILS = [
+  'ashabana@hotmail.com',
+  'admin@school.edu'
+];
+
 // --- FIREBASE INITIALIZATION ---
-// Hybrid config: Uses internal environment variables here, but falls back to your real keys when deployed on Vercel
 const isPreviewEnv = typeof __firebase_config !== 'undefined' && __firebase_config;
 const firebaseConfig = isPreviewEnv ? JSON.parse(__firebase_config) : {
   apiKey: "AIzaSyAW3I1jRHHzkLHRVQ_BU6wsZfnpphqPNOs",
@@ -162,10 +168,6 @@ const styles = `
   .result-circle { width: 12rem; height: 12rem; border: 8px solid #f1f5f9; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0 auto 2rem; }
   .result-score { font-size: 3.5rem; font-weight: 900; line-height: 1; color: #0f172a; }
   
-  .role-toggle { display: flex; background: #f1f5f9; padding: 0.375rem; border-radius: 1rem; margin-bottom: 1.5rem; gap: 0.375rem; }
-  .role-btn { flex: 1; padding: 0.75rem; text-align: center; font-size: 0.875rem; font-weight: 700; color: #64748b; border-radius: 0.75rem; cursor: pointer; border: none; background: transparent; transition: 0.2s; white-space: nowrap; }
-  .role-btn.active { background: white; color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-  
   .admin-form-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
   @media (min-width: 768px) {
     .admin-form-grid { grid-template-columns: 1fr 1fr; }
@@ -192,6 +194,8 @@ const styles = `
   
   .empty-state { border: 2px dashed #cbd5e1; padding: 3rem; text-align: center; border-radius: 1rem; background: white; }
   
+  .error-message { background: #fef2f2; color: #ef4444; border: 1px solid #fca5a5; padding: 1rem; border-radius: 0.75rem; font-weight: 600; text-align: center; }
+
   @media (max-width: 640px) {
     .nav { padding: 1rem; }
     .container { padding: 1rem; }
@@ -212,8 +216,9 @@ export default function App() {
   const [localAuthActive, setLocalAuthActive] = useState(false);
 
   // Login Form
-  const [authForm, setAuthForm] = useState({ name: '', email: '', role: 'student' });
+  const [authForm, setAuthForm] = useState({ name: '', email: '' });
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
+  const [authError, setAuthError] = useState('');
 
   // Exam Data State (Dynamic)
   const [exams, setExams] = useState([]);
@@ -235,11 +240,7 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (error) {
         console.error("Auth init error:", error);
       }
@@ -333,16 +334,25 @@ export default function App() {
     e.preventDefault();
     if (!user) return;
     setIsSubmittingAuth(true);
+    setAuthError('');
+    
+    // Automatically set role based on email array
+    const userEmail = authForm.email.toLowerCase().trim();
+    const isTeacher = ADMIN_EMAILS.includes(userEmail);
+    const role = isTeacher ? 'teacher' : 'student';
+
     try {
       const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
       await setDoc(profileRef, {
         name: authForm.name,
-        email: authForm.email,
-        role: authForm.role,
+        email: userEmail,
+        role: role,
         createdAt: Date.now()
       });
+      // Will automatically redirect due to onSnapshot listener
     } catch (error) {
       console.error("Error creating profile:", error);
+      setAuthError("Failed to save to database. Please update your Firebase Rules.");
     } finally {
       setIsSubmittingAuth(false);
     }
@@ -350,7 +360,10 @@ export default function App() {
 
   const handleLocalLogin = (e) => {
     e.preventDefault();
-    if (userProfile && authForm.email.toLowerCase() === userProfile.email.toLowerCase()) {
+    setAuthError('');
+    const userEmail = authForm.email.toLowerCase().trim();
+    
+    if (userProfile && userEmail === userProfile.email.toLowerCase()) {
       setLocalAuthActive(true);
       if (userProfile.role === 'teacher') {
         setAdminView('list_exams');
@@ -359,14 +372,16 @@ export default function App() {
         setAppState('home');
       }
     } else {
+      setAuthError("Email address does not match the registered account.");
       setAuthForm({...authForm, email: ''});
     }
   };
 
   const handleLogout = () => {
     setLocalAuthActive(false);
-    setAuthForm({ name: '', email: '', role: 'student' });
+    setAuthForm({ name: '', email: '' });
     setSelectedExam(null);
+    setAuthError('');
     setAppState('login');
   };
 
@@ -556,13 +571,14 @@ export default function App() {
               <h2 className="subtitle text-center mb-6">
                 {isReturningUser ? `Welcome back, ${userProfile.name}` : 'Create an Account'}
               </h2>
+              
+              {authError && (
+                <div className="error-message mb-6">
+                  {authError}
+                </div>
+              )}
+
               <form onSubmit={isReturningUser ? handleLocalLogin : handleCreateProfile}>
-                {!isReturningUser && (
-                  <div className="role-toggle">
-                    <button type="button" onClick={() => setAuthForm({...authForm, role: 'student'})} className={`role-btn ${authForm.role === 'student' ? 'active' : ''}`}>Student</button>
-                    <button type="button" onClick={() => setAuthForm({...authForm, role: 'teacher'})} className={`role-btn ${authForm.role === 'teacher' ? 'active' : ''}`}>Teacher Admin</button>
-                  </div>
-                )}
                 {!isReturningUser && (
                   <div className="input-group">
                     <label className="label">Full Name</label>
@@ -576,11 +592,11 @@ export default function App() {
                   <label className="label">Email Address</label>
                   <div className="input-wrapper">
                     <Mail size={18} className="input-icon" />
-                    <input type="email" required value={authForm.email} onChange={(e) => setAuthForm({...authForm, email: e.target.value})} className="input" placeholder={authForm.role === 'teacher' ? "teacher@school.edu" : "student@school.edu"} />
+                    <input type="email" required value={authForm.email} onChange={(e) => setAuthForm({...authForm, email: e.target.value})} className="input" placeholder="student@school.edu" />
                   </div>
                 </div>
                 <button type="submit" disabled={isSubmittingAuth} className="btn btn-primary w-full mt-4">
-                  {isSubmittingAuth ? 'Saving...' : (isReturningUser ? 'Enter Portal' : 'Complete Registration')} <ArrowRight size={18} />
+                  {isSubmittingAuth ? 'Saving...' : (isReturningUser ? 'Sign In' : 'Complete Registration')} <ArrowRight size={18} />
                 </button>
               </form>
             </div>
