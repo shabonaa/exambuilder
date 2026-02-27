@@ -268,7 +268,10 @@ export default function App() {
       } else {
         setAppState('login');
       }
-    }, (error) => console.error("Error fetching profile:", error));
+    }, (error) => {
+      console.error("Error fetching profile:", error);
+      setAppState('login');
+    });
 
     const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams');
     const unsubExams = onSnapshot(examsRef, (snapshot) => {
@@ -284,7 +287,7 @@ export default function App() {
     }, (error) => console.error("Error fetching questions:", error));
 
     return () => { unsubProfile(); unsubExams(); unsubQuestions(); };
-  }, [user]);
+  }, [user, appState]);
 
   useEffect(() => {
     if (!user || userProfile?.role === 'teacher') return;
