@@ -70,7 +70,7 @@ const styles = `
   .flex-1 { flex: 1; }
   
   .container { width: 100%; max-width: 64rem; margin: 0 auto; padding: 2rem; }
-  .container-sm { max-width: 28rem; }
+  .container-sm { max-width: 32rem; }
   
   .card { background: white; border-radius: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; padding: 2rem; }
   .card-header { background: #0f172a; color: white; padding: 2rem; text-align: center; border-radius: 1rem 1rem 0 0; margin: -2rem -2rem 2rem -2rem; }
@@ -163,7 +163,7 @@ const styles = `
   .result-score { font-size: 3.5rem; font-weight: 900; line-height: 1; color: #0f172a; }
   
   .role-toggle { display: flex; background: #f1f5f9; padding: 0.375rem; border-radius: 1rem; margin-bottom: 1.5rem; gap: 0.375rem; }
-  .role-btn { flex: 1; padding: 0.75rem; text-align: center; font-size: 0.875rem; font-weight: 700; color: #64748b; border-radius: 0.75rem; cursor: pointer; border: none; background: transparent; transition: 0.2s; }
+  .role-btn { flex: 1; padding: 0.75rem; text-align: center; font-size: 0.875rem; font-weight: 700; color: #64748b; border-radius: 0.75rem; cursor: pointer; border: none; background: transparent; transition: 0.2s; white-space: nowrap; }
   .role-btn.active { background: white; color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
   
   .admin-form-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
@@ -549,7 +549,7 @@ export default function App() {
           <div className="card container-sm" style={{ padding: 0, overflow: 'hidden' }}>
             <div className="card-header">
               <div className="card-header-icon"><Calculator size={32} /></div>
-              <h1 className="title" style={{ color: 'white' }}>Olyst Platform</h1>
+              <h1 className="title" style={{ color: 'white' }}>Test Exam Platform</h1>
               <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Interactive Assessment Environment</p>
             </div>
             <div style={{ padding: '2rem' }}>
@@ -593,7 +593,7 @@ export default function App() {
       return (
         <div className="min-h-screen">
           <nav className="nav dark">
-            <div className="nav-brand"><Settings size={24} color="#60a5fa" /> <span className="hidden-sm">Olyst Admin Portal</span></div>
+            <div className="nav-brand"><Settings size={24} color="#60a5fa" /> <span className="hidden-sm">Test Exam Admin</span></div>
             <div className="flex items-center gap-4">
               <span className="badge hidden-sm">Teacher: {userProfile?.name}</span>
               <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }}><LogOut size={16} /> <span className="hidden-sm">Logout</span></button>
@@ -774,7 +774,7 @@ export default function App() {
       return (
         <div className="min-h-screen">
           <nav className="nav">
-            <div className="nav-brand"><Calculator color="#2563eb" size={24} /> Olyst Student</div>
+            <div className="nav-brand"><Calculator color="#2563eb" size={24} /> Test Exam Student</div>
             <div className="flex items-center gap-4">
               <span className="badge hidden-sm"><User size={16} /> {userProfile?.name}</span>
               <button onClick={handleLogout} className="btn btn-outline" style={{ padding: '0.5rem 1rem' }}><LogOut size={16} /> <span className="hidden-sm">Logout</span></button>
