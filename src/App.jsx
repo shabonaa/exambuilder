@@ -8,13 +8,6 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
-// --- CONFIGURATION ---
-// Add the emails of anyone who should have Teacher Admin access here:
-const ADMIN_EMAILS = [
-  'ashabana@hotmail.com',
-  'admin@school.edu'
-];
-
 // --- FIREBASE INITIALIZATION ---
 const isPreviewEnv = typeof __firebase_config !== 'undefined' && __firebase_config;
 const firebaseConfig = isPreviewEnv ? JSON.parse(__firebase_config) : {
@@ -216,9 +209,11 @@ export default function App() {
   const [localAuthActive, setLocalAuthActive] = useState(false);
 
   // Login Form
-  const [authForm, setAuthForm] = useState({ name: '', email: '' });
+  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [loginMode, setLoginMode] = useState('student'); // 'student' or 'teacher'
+  const [teachersList, setTeachersList] = useState([]);
 
   // Exam Data State (Dynamic)
   const [exams, setExams] = useState([]);
@@ -287,7 +282,13 @@ export default function App() {
       setAllQuestions(loadedQs);
     }, (error) => console.error("Error fetching questions:", error));
 
-    return () => { unsubProfile(); unsubExams(); unsubQuestions(); };
+    const teachersRef = collection(db, 'artifacts', appId, 'public', 'data', 'teachers');
+    const unsubTeachers = onSnapshot(teachersRef, (snapshot) => {
+      const loadedTeachers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setTeachersList(loadedTeachers);
+    }, (error) => console.error("Error fetching teachers:", error));
+
+    return () => { unsubProfile(); unsubExams(); unsubQuestions(); unsubTeachers(); };
   }, [user, appState]);
 
   useEffect(() => {
@@ -330,58 +331,78 @@ export default function App() {
 
   const currentQuestions = getCurrentExamQuestions();
 
-  const handleCreateProfile = async (e) => {
+  const handleStudentSubmit = async (e) => {
     e.preventDefault();
     if (!user) return;
     setIsSubmittingAuth(true);
     setAuthError('');
     
-    // Automatically set role based on email array
-    const userEmail = authForm.email.toLowerCase().trim();
-    const isTeacher = ADMIN_EMAILS.includes(userEmail);
-    const role = isTeacher ? 'teacher' : 'student';
-
     try {
-      const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-      await setDoc(profileRef, {
-        name: authForm.name,
-        email: userEmail,
-        role: role,
-        createdAt: Date.now()
-      });
-      // Will automatically redirect due to onSnapshot listener
+      const userEmail = authForm.email.toLowerCase().trim();
+      const isReturning = userProfile && userProfile.role === 'student' && !localAuthActive;
+
+      if (isReturning) {
+        if (userEmail === userProfile.email.toLowerCase()) {
+          setLocalAuthActive(true);
+          setAppState('home');
+        } else {
+          setAuthError("Email address does not match your registered account.");
+        }
+      } else {
+        const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
+        await setDoc(profileRef, {
+          name: authForm.name,
+          email: userEmail,
+          role: 'student',
+          createdAt: Date.now()
+        });
+      }
     } catch (error) {
-      console.error("Error creating profile:", error);
-      setAuthError("Failed to save to database. Please update your Firebase Rules.");
+      console.error("Error with student auth:", error);
+      setAuthError("Failed to process request. Please update your Firebase Rules.");
     } finally {
       setIsSubmittingAuth(false);
     }
   };
 
-  const handleLocalLogin = (e) => {
+  const handleTeacherSubmit = async (e) => {
     e.preventDefault();
+    if (!user) return;
+    setIsSubmittingAuth(true);
     setAuthError('');
-    const userEmail = authForm.email.toLowerCase().trim();
     
-    if (userProfile && userEmail === userProfile.email.toLowerCase()) {
-      setLocalAuthActive(true);
-      if (userProfile.role === 'teacher') {
-        setAdminView('list_exams');
+    try {
+      const userEmail = authForm.email.toLowerCase().trim();
+      // Authenticate against manual credentials loaded from database
+      const teacher = teachersList.find(t => t.email.toLowerCase() === userEmail && t.password === authForm.password);
+
+      if (teacher) {
+        const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
+        await setDoc(profileRef, {
+          name: teacher.name || 'Teacher Admin',
+          email: userEmail,
+          role: 'teacher',
+          createdAt: Date.now()
+        });
+        setLocalAuthActive(true);
         setAppState('admin');
       } else {
-        setAppState('home');
+        setAuthError("Invalid teacher credentials. Please verify your email and password.");
       }
-    } else {
-      setAuthError("Email address does not match the registered account.");
-      setAuthForm({...authForm, email: ''});
+    } catch (error) {
+      console.error("Error with teacher auth:", error);
+      setAuthError("Failed to authenticate. Please check your Firebase Rules.");
+    } finally {
+      setIsSubmittingAuth(false);
     }
   };
 
   const handleLogout = () => {
     setLocalAuthActive(false);
-    setAuthForm({ name: '', email: '' });
+    setAuthForm({ name: '', email: '', password: '' });
     setSelectedExam(null);
     setAuthError('');
+    setLoginMode(userProfile?.role || 'student');
     setAppState('login');
   };
 
@@ -558,7 +579,9 @@ export default function App() {
     }
 
     if (appState === 'login') {
-      const isReturningUser = userProfile !== null && !localAuthActive;
+      const isReturningStudent = loginMode === 'student' && userProfile !== null && userProfile.role === 'student' && !localAuthActive;
+      const isReturningTeacher = loginMode === 'teacher' && userProfile !== null && userProfile.role === 'teacher' && !localAuthActive;
+
       return (
         <div className="min-h-screen flex items-center justify-center" style={{ padding: '1.5rem' }}>
           <div className="card container-sm" style={{ padding: 0, overflow: 'hidden' }}>
@@ -568,37 +591,67 @@ export default function App() {
               <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Interactive Assessment Environment</p>
             </div>
             <div style={{ padding: '2rem' }}>
-              <h2 className="subtitle text-center mb-6">
-                {isReturningUser ? `Welcome back, ${userProfile.name}` : 'Create an Account'}
-              </h2>
               
+              <div className="role-toggle">
+                <button type="button" onClick={() => { setLoginMode('student'); setAuthError(''); }} className={`role-btn ${loginMode === 'student' ? 'active' : ''}`}>Student</button>
+                <button type="button" onClick={() => { setLoginMode('teacher'); setAuthError(''); }} className={`role-btn ${loginMode === 'teacher' ? 'active' : ''}`}>Teacher Admin</button>
+              </div>
+
               {authError && (
                 <div className="error-message mb-6">
                   {authError}
                 </div>
               )}
 
-              <form onSubmit={isReturningUser ? handleLocalLogin : handleCreateProfile}>
-                {!isReturningUser && (
+              {loginMode === 'student' ? (
+                <form onSubmit={handleStudentSubmit}>
+                  <h2 className="subtitle text-center mb-6">
+                    {isReturningStudent ? `Welcome back, ${userProfile.name}` : 'Create Student Account'}
+                  </h2>
+                  {!isReturningStudent && (
+                    <div className="input-group">
+                      <label className="label">Full Name</label>
+                      <div className="input-wrapper">
+                        <User size={18} className="input-icon" />
+                        <input type="text" required value={authForm.name} onChange={(e) => setAuthForm({...authForm, name: e.target.value})} className="input" placeholder="e.g. John Doe" />
+                      </div>
+                    </div>
+                  )}
                   <div className="input-group">
-                    <label className="label">Full Name</label>
+                    <label className="label">Email Address</label>
                     <div className="input-wrapper">
-                      <User size={18} className="input-icon" />
-                      <input type="text" required value={authForm.name} onChange={(e) => setAuthForm({...authForm, name: e.target.value})} className="input" placeholder="e.g. John Doe" />
+                      <Mail size={18} className="input-icon" />
+                      <input type="email" required value={authForm.email} onChange={(e) => setAuthForm({...authForm, email: e.target.value})} className="input" placeholder="student@school.edu" />
                     </div>
                   </div>
-                )}
-                <div className="input-group">
-                  <label className="label">Email Address</label>
-                  <div className="input-wrapper">
-                    <Mail size={18} className="input-icon" />
-                    <input type="email" required value={authForm.email} onChange={(e) => setAuthForm({...authForm, email: e.target.value})} className="input" placeholder="student@school.edu" />
+                  <button type="submit" disabled={isSubmittingAuth} className="btn btn-primary w-full mt-4">
+                    {isSubmittingAuth ? 'Processing...' : (isReturningStudent ? 'Sign In' : 'Complete Registration')} <ArrowRight size={18} />
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleTeacherSubmit}>
+                  <h2 className="subtitle text-center mb-6">
+                    {isReturningTeacher ? `Welcome back, ${userProfile.name}` : 'Teacher Sign In'}
+                  </h2>
+                  <div className="input-group">
+                    <label className="label">Email Address</label>
+                    <div className="input-wrapper">
+                      <Mail size={18} className="input-icon" />
+                      <input type="email" required value={authForm.email} onChange={(e) => setAuthForm({...authForm, email: e.target.value})} className="input" placeholder="teacher@school.edu" />
+                    </div>
                   </div>
-                </div>
-                <button type="submit" disabled={isSubmittingAuth} className="btn btn-primary w-full mt-4">
-                  {isSubmittingAuth ? 'Saving...' : (isReturningUser ? 'Sign In' : 'Complete Registration')} <ArrowRight size={18} />
-                </button>
-              </form>
+                  <div className="input-group">
+                    <label className="label">Password</label>
+                    <div className="input-wrapper">
+                      <Lock size={18} className="input-icon" />
+                      <input type="password" required value={authForm.password || ''} onChange={(e) => setAuthForm({...authForm, password: e.target.value})} className="input" placeholder="••••••••" />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={isSubmittingAuth} className="btn btn-primary w-full mt-4">
+                    {isSubmittingAuth ? 'Authenticating...' : 'Secure Sign In'} <ArrowRight size={18} />
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         </div>
