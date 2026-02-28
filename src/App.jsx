@@ -5,7 +5,7 @@ import {
   Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // --- FIREBASE INITIALIZATION ---
@@ -69,7 +69,7 @@ const styles = `
   .flex-1 { flex: 1; }
   
   .container { width: 100%; max-width: 64rem; margin: 0 auto; padding: 2rem; }
-  .container-sm { max-width: 32rem; }
+  .container-sm { max-width: 28rem; }
   
   .card { background: white; border-radius: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; padding: 2rem; }
   .card-header { background: #0f172a; color: white; padding: 2rem; text-align: center; border-radius: 1rem 1rem 0 0; margin: -2rem -2rem 2rem -2rem; }
@@ -86,7 +86,7 @@ const styles = `
   .title { font-size: 1.875rem; font-weight: 700; margin-bottom: 0.5rem; line-height: 1.2; }
   .subtitle { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.25rem; }
   
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: 0.2s; background: transparent; font-size: 1rem; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: 0.2s; background: transparent; font-size: 1rem; outline: none; }
   .btn:disabled { opacity: 0.6; cursor: not-allowed; }
   .btn-primary { background: #2563eb; color: white; }
   .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
@@ -99,10 +99,13 @@ const styles = `
   .btn-icon { padding: 0.5rem; border-radius: 0.5rem; color: #94a3b8; background: transparent; }
   .btn-icon:hover { color: #2563eb; background: #eff6ff; }
   .btn-icon-danger:hover { color: #ef4444; background: #fef2f2; }
+  .btn-link { color: #2563eb; font-weight: 600; background: none; border: none; cursor: pointer; padding: 0.5rem; transition: 0.2s; }
+  .btn-link:hover { text-decoration: underline; color: #1d4ed8; }
   
   .w-full { width: 100%; }
   .mt-2 { margin-top: 0.5rem; }
   .mt-4 { margin-top: 1rem; }
+  .mt-6 { margin-top: 1.5rem; }
   .mb-2 { margin-bottom: 0.5rem; }
   .mb-4 { margin-bottom: 1rem; }
   .mb-6 { margin-bottom: 1.5rem; }
@@ -139,7 +142,7 @@ const styles = `
   .history-icon { background: white; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #e2e8f0; color: #94a3b8; }
   
   .question-box { background: white; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 2rem; margin-bottom: 1.5rem; }
-  .option-btn { width: 100%; text-align: left; padding: 1.25rem; border: 2px solid #e2e8f0; background: white; border-radius: 0.75rem; margin-bottom: 0.75rem; cursor: pointer; display: flex; align-items: center; font-size: 1.125rem; transition: 0.2s; }
+  .option-btn { width: 100%; text-align: left; padding: 1.25rem; border: 2px solid #e2e8f0; background: white; border-radius: 0.75rem; margin-bottom: 0.75rem; cursor: pointer; display: flex; align-items: center; font-size: 1.125rem; transition: 0.2s; outline: none; }
   .option-btn:hover { border-color: #bfdbfe; background: #f8fafc; }
   .option-btn.selected { border-color: #2563eb; background: #eff6ff; }
   .option-letter { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border: 2px solid #cbd5e1; border-radius: 0.5rem; margin-right: 1rem; font-weight: 700; background: #f1f5f9; color: #64748b; }
@@ -151,7 +154,7 @@ const styles = `
   
   .progress-nav { display: flex; justify-content: space-between; align-items: center; padding-top: 1.5rem; border-top: 1px solid #e2e8f0; margin-top: auto; }
   .progress-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; max-width: 400px; margin: 0 auto; }
-  .progress-dot { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border-radius: 0.5rem; font-weight: 600; font-size: 0.875rem; cursor: pointer; border: 1px solid #cbd5e1; background: white; color: #64748b; }
+  .progress-dot { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border-radius: 0.5rem; font-weight: 600; font-size: 0.875rem; cursor: pointer; border: 1px solid #cbd5e1; background: white; color: #64748b; outline: none; }
   .progress-dot.answered { background: #1e293b; color: white; border-color: #1e293b; }
   .progress-dot.current { border: 2px solid #2563eb; color: #2563eb; }
   
@@ -160,6 +163,11 @@ const styles = `
   
   .result-circle { width: 12rem; height: 12rem; border: 8px solid #f1f5f9; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0 auto 2rem; }
   .result-score { font-size: 3.5rem; font-weight: 900; line-height: 1; color: #0f172a; }
+  
+  .role-toggle { display: flex; background: #e2e8f0; padding: 0.375rem; border-radius: 0.75rem; margin-bottom: 1.5rem; gap: 0.375rem; }
+  .role-btn { flex: 1; padding: 0.75rem 1rem; text-align: center; font-size: 0.875rem; font-weight: 700; color: #64748b; border-radius: 0.5rem; cursor: pointer; border: none; outline: none; background: transparent; transition: all 0.2s ease; appearance: none; white-space: nowrap; }
+  .role-btn:hover { color: #334155; }
+  .role-btn.active { background: white; color: #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,0.1); pointer-events: none; }
   
   .admin-form-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
   @media (min-width: 768px) {
@@ -200,24 +208,30 @@ const styles = `
 `;
 
 export default function App() {
+  // App routing logic
   const [appState, setAppState] = useState('loading'); // 'loading', 'login', 'home', 'exam_intro', 'exam', 'results', 'admin'
   
-  // Auth & DB State
-  const [user, setUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
-  const [pastResults, setPastResults] = useState([]);
-  const [localAuthActive, setLocalAuthActive] = useState(false);
+  // Persistent active session handled locally for multi-device sync
+  const [activeSession, setActiveSession] = useState(() => {
+    const saved = localStorage.getItem('olyst_session');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   // Login Form
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
   const [authError, setAuthError] = useState('');
   const [loginMode, setLoginMode] = useState('student'); // 'student' or 'teacher'
-  const [teachersList, setTeachersList] = useState([]);
+  const [isRegistering, setIsRegistering] = useState(false); // only applies to student
 
-  // Exam Data State (Dynamic)
+  // Global DB Data
+  const [teachersList, setTeachersList] = useState([]);
+  const [studentProfiles, setStudentProfiles] = useState([]);
   const [exams, setExams] = useState([]);
   const [allQuestions, setAllQuestions] = useState([]);
+  
+  // Personal Data
+  const [pastResults, setPastResults] = useState([]);
   const [selectedExam, setSelectedExam] = useState(null);
 
   // Student Exam Session State
@@ -232,6 +246,7 @@ export default function App() {
   const [editingExamDetails, setEditingExamDetails] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
 
+  // 1. Initialize Anonymous Auth (Required to satisfy strict DB paths before querying)
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -241,69 +256,66 @@ export default function App() {
       }
     };
     initAuth();
-
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      if (!u) setAppState('login');
-    });
-    return () => unsubscribe();
   }, []);
 
+  // 2. Fetch Public Collections Once Authenticated
   useEffect(() => {
-    if (!user) return;
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        // Fetch Teachers
+        const unsubTeachers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'teachers'), (snapshot) => {
+          setTeachersList(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (error) => console.error("Error fetching teachers:", error));
 
-    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-    const unsubProfile = onSnapshot(profileRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setUserProfile(data);
-        setLocalAuthActive(true);
-        if (appState === 'loading' || appState === 'login') {
-          setAppState(data.role === 'teacher' ? 'admin' : 'home');
-        }
-      } else {
-        setAppState('login');
+        // Fetch Students
+        const unsubStudents = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'studentProfiles'), (snapshot) => {
+          setStudentProfiles(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (error) => console.error("Error fetching students:", error));
+
+        // Fetch Exams
+        const unsubExams = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'exams'), (snapshot) => {
+          const loadedExams = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          loadedExams.sort((a, b) => b.createdAt - a.createdAt); 
+          setExams(loadedExams);
+        }, (error) => console.error("Error fetching exams:", error));
+
+        // Fetch Questions
+        const unsubQuestions = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'questions'), (snapshot) => {
+          setAllQuestions(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        }, (error) => console.error("Error fetching questions:", error));
+
+        return () => { unsubTeachers(); unsubStudents(); unsubExams(); unsubQuestions(); };
       }
-    }, (error) => {
-      console.error("Error fetching profile:", error);
-      setAppState('login');
     });
+    return () => unsubscribeAuth();
+  }, []);
 
-    const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams');
-    const unsubExams = onSnapshot(examsRef, (snapshot) => {
-      const loadedExams = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      loadedExams.sort((a, b) => b.createdAt - a.createdAt); 
-      setExams(loadedExams);
-    }, (error) => console.error("Error fetching exams:", error));
-
-    const questionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions');
-    const unsubQuestions = onSnapshot(questionsRef, (snapshot) => {
-      const loadedQs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setAllQuestions(loadedQs);
-    }, (error) => console.error("Error fetching questions:", error));
-
-    const teachersRef = collection(db, 'artifacts', appId, 'public', 'data', 'teachers');
-    const unsubTeachers = onSnapshot(teachersRef, (snapshot) => {
-      const loadedTeachers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setTeachersList(loadedTeachers);
-    }, (error) => console.error("Error fetching teachers:", error));
-
-    return () => { unsubProfile(); unsubExams(); unsubQuestions(); unsubTeachers(); };
-  }, [user, appState]);
-
+  // 3. Routing based on Active Session
   useEffect(() => {
-    if (!user || userProfile?.role === 'teacher') return;
+    if (activeSession) {
+      setAppState(activeSession.role === 'teacher' ? 'admin' : 'home');
+    } else {
+      setAppState('login');
+    }
+  }, [activeSession]);
 
-    const resultsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'results');
-    const unsubResults = onSnapshot(resultsRef, (snapshot) => {
-      const results = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      results.sort((a, b) => b.timestamp - a.timestamp);
-      setPastResults(results);
-    }, (error) => console.error("Error fetching results:", error));
+  // 4. Fetch private results for logged in Student
+  useEffect(() => {
+    if (activeSession && activeSession.role === 'student') {
+      const q = collection(db, 'artifacts', appId, 'users', activeSession.studentId, 'results');
+      const unsubResults = onSnapshot(q, (snapshot) => {
+        const results = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        results.sort((a, b) => b.timestamp - a.timestamp);
+        setPastResults(results);
+      }, (error) => console.error("Error fetching results:", error));
 
-    return () => unsubResults();
-  }, [user, userProfile]);
+      return () => unsubResults();
+    } else {
+      setPastResults([]);
+    }
+  }, [activeSession]);
 
+  // Timer Logic
   useEffect(() => {
     let timer;
     if (appState === 'exam' && timeLeft > 0) {
@@ -331,80 +343,75 @@ export default function App() {
 
   const currentQuestions = getCurrentExamQuestions();
 
-  const handleStudentSubmit = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-    setIsSubmittingAuth(true);
-    setAuthError('');
-    
-    try {
-      const userEmail = authForm.email.toLowerCase().trim();
-      const isReturning = userProfile && userProfile.role === 'student' && !localAuthActive;
+  // --- Core Form Handlers ---
 
-      if (isReturning) {
-        if (userEmail === userProfile.email.toLowerCase()) {
-          setLocalAuthActive(true);
-          setAppState('home');
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    setIsSubmittingAuth(true);
+
+    const userEmail = authForm.email.toLowerCase().trim();
+    const userPassword = authForm.password;
+
+    try {
+      if (loginMode === 'teacher') {
+        const teacher = teachersList.find(t => t.email.toLowerCase() === userEmail && t.password === userPassword);
+        if (teacher) {
+          const session = { role: 'teacher', name: teacher.name || 'Teacher', email: userEmail, studentId: 'teacher' };
+          localStorage.setItem('olyst_session', JSON.stringify(session));
+          setActiveSession(session);
         } else {
-          setAuthError("Email address does not match your registered account.");
+          setAuthError("Invalid teacher credentials. Please verify your email and password.");
         }
       } else {
-        const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-        await setDoc(profileRef, {
-          name: authForm.name,
-          email: userEmail,
-          role: 'student',
-          createdAt: Date.now()
-        });
+        // Student Flow
+        if (isRegistering) {
+          const existingStudent = studentProfiles.find(s => s.email.toLowerCase() === userEmail);
+          if (existingStudent) {
+            setAuthError("This email is already registered. Please click 'Sign in' instead.");
+          } else {
+            // Generate a persistent cross-device identifier for this student
+            const newStudentId = `stu_${Date.now()}`;
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'studentProfiles'), {
+              email: userEmail,
+              password: userPassword,
+              name: authForm.name,
+              studentId: newStudentId,
+              createdAt: Date.now()
+            });
+            const session = { role: 'student', name: authForm.name, email: userEmail, studentId: newStudentId };
+            localStorage.setItem('olyst_session', JSON.stringify(session));
+            setActiveSession(session);
+          }
+        } else {
+          const student = studentProfiles.find(s => s.email.toLowerCase() === userEmail && s.password === userPassword);
+          if (student) {
+            const session = { role: 'student', name: student.name, email: userEmail, studentId: student.studentId };
+            localStorage.setItem('olyst_session', JSON.stringify(session));
+            setActiveSession(session);
+          } else {
+            setAuthError("Invalid student credentials. Please verify your email and password.");
+          }
+        }
       }
-    } catch (error) {
-      console.error("Error with student auth:", error);
-      setAuthError("Failed to process request. Please update your Firebase Rules.");
-    } finally {
-      setIsSubmittingAuth(false);
-    }
-  };
-
-  const handleTeacherSubmit = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-    setIsSubmittingAuth(true);
-    setAuthError('');
-    
-    try {
-      const userEmail = authForm.email.toLowerCase().trim();
-      // Authenticate against manual credentials loaded from database
-      const teacher = teachersList.find(t => t.email.toLowerCase() === userEmail && t.password === authForm.password);
-
-      if (teacher) {
-        const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-        await setDoc(profileRef, {
-          name: teacher.name || 'Teacher Admin',
-          email: userEmail,
-          role: 'teacher',
-          createdAt: Date.now()
-        });
-        setLocalAuthActive(true);
-        setAppState('admin');
-      } else {
-        setAuthError("Invalid teacher credentials. Please verify your email and password.");
-      }
-    } catch (error) {
-      console.error("Error with teacher auth:", error);
-      setAuthError("Failed to authenticate. Please check your Firebase Rules.");
+    } catch (err) {
+      console.error("Auth Error:", err);
+      setAuthError("Database operation failed. Ensure Firebase rules are fully public.");
     } finally {
       setIsSubmittingAuth(false);
     }
   };
 
   const handleLogout = () => {
-    setLocalAuthActive(false);
+    localStorage.removeItem('olyst_session');
+    setActiveSession(null);
     setAuthForm({ name: '', email: '', password: '' });
     setSelectedExam(null);
     setAuthError('');
-    setLoginMode(userProfile?.role || 'student');
-    setAppState('login');
+    setIsRegistering(false);
   };
+
+  // --- Student Exam Handlers ---
 
   const selectExamForTaking = (exam) => {
     setSelectedExam(exam);
@@ -431,10 +438,9 @@ export default function App() {
     const percentage = Math.round((score / currentQuestions.length) * 100);
     setCurrentScore({ score, percentage });
 
-    if (user && localAuthActive && userProfile?.role !== 'teacher') {
+    if (activeSession && activeSession.role === 'student') {
       try {
-        const resultsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'results');
-        await addDoc(resultsRef, {
+        await addDoc(collection(db, 'artifacts', appId, 'users', activeSession.studentId, 'results'), {
           examId: selectedExam.id,
           examTitle: selectedExam.title,
           score,
@@ -460,8 +466,9 @@ export default function App() {
     }
   };
 
+  // --- Admin Builder Handlers ---
+
   const seedDemoExam = async () => {
-    if (!user) return;
     try {
       const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams');
       const examDocRef = await addDoc(examsRef, { ...DEFAULT_EXAM, createdAt: Date.now() });
@@ -486,7 +493,6 @@ export default function App() {
 
   const saveExamDetails = async (e) => {
     e.preventDefault();
-    if (!user) return;
     
     const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams');
     const examData = {
@@ -512,7 +518,7 @@ export default function App() {
   };
 
   const deleteExam = async (examId) => {
-    if (!user || !window.confirm("Are you sure? This will delete the exam.")) return;
+    if (!window.confirm("Are you sure? This will delete the exam.")) return;
     try {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'exams', examId));
       const qsToDelete = allQuestions.filter(q => q.examId === examId);
@@ -535,7 +541,7 @@ export default function App() {
 
   const saveQuestion = async (e) => {
     e.preventDefault();
-    if (!user || !selectedExam) return;
+    if (!selectedExam) return;
     
     const questionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions');
     const qData = {
@@ -559,7 +565,7 @@ export default function App() {
   };
 
   const deleteQuestion = async (id) => {
-    if (!user || !window.confirm('Are you sure you want to delete this question?')) return;
+    if (!window.confirm('Are you sure you want to delete this question?')) return;
     try {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'questions', id));
     } catch (err) {
@@ -579,9 +585,6 @@ export default function App() {
     }
 
     if (appState === 'login') {
-      const isReturningStudent = loginMode === 'student' && userProfile !== null && userProfile.role === 'student' && !localAuthActive;
-      const isReturningTeacher = loginMode === 'teacher' && userProfile !== null && userProfile.role === 'teacher' && !localAuthActive;
-
       return (
         <div className="min-h-screen flex items-center justify-center" style={{ padding: '1.5rem' }}>
           <div className="card container-sm" style={{ padding: 0, overflow: 'hidden' }}>
@@ -593,8 +596,8 @@ export default function App() {
             <div style={{ padding: '2rem' }}>
               
               <div className="role-toggle">
-                <button type="button" onClick={() => { setLoginMode('student'); setAuthError(''); }} className={`role-btn ${loginMode === 'student' ? 'active' : ''}`}>Student</button>
-                <button type="button" onClick={() => { setLoginMode('teacher'); setAuthError(''); }} className={`role-btn ${loginMode === 'teacher' ? 'active' : ''}`}>Teacher Admin</button>
+                <button type="button" onClick={() => { setLoginMode('student'); setAuthError(''); setIsRegistering(false); }} className={`role-btn ${loginMode === 'student' ? 'active' : ''}`}>Student</button>
+                <button type="button" onClick={() => { setLoginMode('teacher'); setAuthError(''); setIsRegistering(false); }} className={`role-btn ${loginMode === 'teacher' ? 'active' : ''}`}>Teacher Admin</button>
               </div>
 
               {authError && (
@@ -603,55 +606,50 @@ export default function App() {
                 </div>
               )}
 
-              {loginMode === 'student' ? (
-                <form onSubmit={handleStudentSubmit}>
-                  <h2 className="subtitle text-center mb-6">
-                    {isReturningStudent ? `Welcome back, ${userProfile.name}` : 'Create Student Account'}
-                  </h2>
-                  {!isReturningStudent && (
-                    <div className="input-group">
-                      <label className="label">Full Name</label>
-                      <div className="input-wrapper">
-                        <User size={18} className="input-icon" />
-                        <input type="text" required value={authForm.name} onChange={(e) => setAuthForm({...authForm, name: e.target.value})} className="input" placeholder="e.g. John Doe" />
-                      </div>
-                    </div>
-                  )}
+              <form onSubmit={handleAuthSubmit}>
+                <h2 className="subtitle text-center mb-6">
+                  {loginMode === 'teacher' ? 'Teacher Sign In' : (isRegistering ? 'Create Student Account' : 'Student Sign In')}
+                </h2>
+                
+                {loginMode === 'student' && isRegistering && (
                   <div className="input-group">
-                    <label className="label">Email Address</label>
+                    <label className="label">Full Name</label>
                     <div className="input-wrapper">
-                      <Mail size={18} className="input-icon" />
-                      <input type="email" required value={authForm.email} onChange={(e) => setAuthForm({...authForm, email: e.target.value})} className="input" placeholder="student@school.edu" />
+                      <User size={18} className="input-icon" />
+                      <input type="text" required value={authForm.name} onChange={(e) => setAuthForm({...authForm, name: e.target.value})} className="input" placeholder="e.g. John Doe" />
                     </div>
                   </div>
-                  <button type="submit" disabled={isSubmittingAuth} className="btn btn-primary w-full mt-4">
-                    {isSubmittingAuth ? 'Processing...' : (isReturningStudent ? 'Sign In' : 'Complete Registration')} <ArrowRight size={18} />
+                )}
+
+                <div className="input-group">
+                  <label className="label">Email Address</label>
+                  <div className="input-wrapper">
+                    <Mail size={18} className="input-icon" />
+                    <input type="email" required value={authForm.email} onChange={(e) => setAuthForm({...authForm, email: e.target.value})} className="input" placeholder={loginMode === 'teacher' ? "teacher@school.edu" : "student@school.edu"} />
+                  </div>
+                </div>
+
+                <div className="input-group">
+                  <label className="label">Password</label>
+                  <div className="input-wrapper">
+                    <Lock size={18} className="input-icon" />
+                    <input type="password" required value={authForm.password || ''} onChange={(e) => setAuthForm({...authForm, password: e.target.value})} className="input" placeholder="••••••••" />
+                  </div>
+                </div>
+
+                <button type="submit" disabled={isSubmittingAuth} className="btn btn-primary w-full mt-4">
+                  {isSubmittingAuth ? 'Processing...' : (loginMode === 'teacher' || !isRegistering ? 'Secure Sign In' : 'Complete Registration')} <ArrowRight size={18} />
+                </button>
+              </form>
+
+              {loginMode === 'student' && (
+                <div className="text-center mt-6">
+                  <button type="button" onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); setAuthForm({ name: '', email: '', password: '' }); }} className="btn-link">
+                    {isRegistering ? "Already have an account? Sign in" : "Don't have an account? Register"}
                   </button>
-                </form>
-              ) : (
-                <form onSubmit={handleTeacherSubmit}>
-                  <h2 className="subtitle text-center mb-6">
-                    {isReturningTeacher ? `Welcome back, ${userProfile.name}` : 'Teacher Sign In'}
-                  </h2>
-                  <div className="input-group">
-                    <label className="label">Email Address</label>
-                    <div className="input-wrapper">
-                      <Mail size={18} className="input-icon" />
-                      <input type="email" required value={authForm.email} onChange={(e) => setAuthForm({...authForm, email: e.target.value})} className="input" placeholder="teacher@school.edu" />
-                    </div>
-                  </div>
-                  <div className="input-group">
-                    <label className="label">Password</label>
-                    <div className="input-wrapper">
-                      <Lock size={18} className="input-icon" />
-                      <input type="password" required value={authForm.password || ''} onChange={(e) => setAuthForm({...authForm, password: e.target.value})} className="input" placeholder="••••••••" />
-                    </div>
-                  </div>
-                  <button type="submit" disabled={isSubmittingAuth} className="btn btn-primary w-full mt-4">
-                    {isSubmittingAuth ? 'Authenticating...' : 'Secure Sign In'} <ArrowRight size={18} />
-                  </button>
-                </form>
+                </div>
               )}
+
             </div>
           </div>
         </div>
@@ -664,7 +662,7 @@ export default function App() {
           <nav className="nav dark">
             <div className="nav-brand"><Settings size={24} color="#60a5fa" /> <span className="hidden-sm">Test Exam Admin</span></div>
             <div className="flex items-center gap-4">
-              <span className="badge hidden-sm">Teacher: {userProfile?.name}</span>
+              <span className="badge hidden-sm">Teacher: {activeSession?.name}</span>
               <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }}><LogOut size={16} /> <span className="hidden-sm">Logout</span></button>
             </div>
           </nav>
@@ -845,7 +843,7 @@ export default function App() {
           <nav className="nav">
             <div className="nav-brand"><Calculator color="#2563eb" size={24} /> Test Exam Student</div>
             <div className="flex items-center gap-4">
-              <span className="badge hidden-sm"><User size={16} /> {userProfile?.name}</span>
+              <span className="badge hidden-sm"><User size={16} /> {activeSession?.name}</span>
               <button onClick={handleLogout} className="btn btn-outline" style={{ padding: '0.5rem 1rem' }}><LogOut size={16} /> <span className="hidden-sm">Logout</span></button>
             </div>
           </nav>
