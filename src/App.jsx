@@ -350,7 +350,8 @@ export default function App() {
     try {
       if (loginMode === 'teacher') {
         if (isRegistering) {
-          const existingTeacher = teachersList.find(t => t.email.toLowerCase() === userEmail);
+          // Use optional chaining (?.) to prevent crashing if a database document has no email field
+          const existingTeacher = teachersList.find(t => t.email?.toLowerCase() === userEmail);
           if (existingTeacher) {
             setAuthError("This email is already registered as a teacher. Please sign in.");
           } else {
@@ -366,8 +367,8 @@ export default function App() {
             setActiveSession(session);
           }
         } else {
-          // Sign in existing teacher
-          const teacher = teachersList.find(t => t.email.toLowerCase() === userEmail && t.password === userPassword);
+          // Sign in existing teacher, using optional chaining (?.)
+          const teacher = teachersList.find(t => t.email?.toLowerCase() === userEmail && t.password === userPassword);
           if (teacher) {
             const session = { role: 'teacher', name: teacher.name || 'Teacher', email: userEmail, studentId: 'teacher' };
             localStorage.setItem('olyst_session', JSON.stringify(session));
@@ -379,7 +380,8 @@ export default function App() {
       } else {
         // Student Flow
         if (isRegistering) {
-          const existingStudent = studentProfiles.find(s => s.email.toLowerCase() === userEmail);
+          // Use optional chaining (?.) for students as well to be safe
+          const existingStudent = studentProfiles.find(s => s.email?.toLowerCase() === userEmail);
           if (existingStudent) {
             setAuthError("This email is already registered. Please click 'Sign in' instead.");
           } else {
@@ -397,7 +399,7 @@ export default function App() {
             setActiveSession(session);
           }
         } else {
-          const student = studentProfiles.find(s => s.email.toLowerCase() === userEmail && s.password === userPassword);
+          const student = studentProfiles.find(s => s.email?.toLowerCase() === userEmail && s.password === userPassword);
           if (student) {
             const session = { role: 'student', name: student.name, email: userEmail, studentId: student.studentId };
             localStorage.setItem('olyst_session', JSON.stringify(session));
