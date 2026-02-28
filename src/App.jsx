@@ -229,7 +229,7 @@ export default function App() {
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
   const [authError, setAuthError] = useState('');
   const [loginMode, setLoginMode] = useState('student'); // 'student' or 'teacher'
-  const [isRegistering, setIsRegistering] = useState(false); // only applies to student
+  const [isRegistering, setIsRegistering] = useState(false); 
 
   // Global DB Data
   const [teachersList, setTeachersList] = useState([]);
@@ -362,13 +362,32 @@ export default function App() {
 
     try {
       if (loginMode === 'teacher') {
-        const teacher = teachersList.find(t => t.email.toLowerCase() === userEmail && t.password === userPassword);
-        if (teacher) {
-          const session = { role: 'teacher', name: teacher.name || 'Teacher', email: userEmail, studentId: 'teacher' };
-          localStorage.setItem('olyst_session', JSON.stringify(session));
-          setActiveSession(session);
+        if (isRegistering) {
+          const existingTeacher = teachersList.find(t => t.email.toLowerCase() === userEmail);
+          if (existingTeacher) {
+            setAuthError("This email is already registered as a teacher. Please sign in.");
+          } else {
+            // Register new teacher
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'teachers'), {
+              email: userEmail,
+              password: userPassword,
+              name: authForm.name,
+              createdAt: Date.now()
+            });
+            const session = { role: 'teacher', name: authForm.name, email: userEmail, studentId: 'teacher' };
+            localStorage.setItem('olyst_session', JSON.stringify(session));
+            setActiveSession(session);
+          }
         } else {
-          setAuthError("Invalid teacher credentials. Please verify your email and password.");
+          // Sign in existing teacher
+          const teacher = teachersList.find(t => t.email.toLowerCase() === userEmail && t.password === userPassword);
+          if (teacher) {
+            const session = { role: 'teacher', name: teacher.name || 'Teacher', email: userEmail, studentId: 'teacher' };
+            localStorage.setItem('olyst_session', JSON.stringify(session));
+            setActiveSession(session);
+          } else {
+            setAuthError("Invalid teacher credentials. Please verify your email and password.");
+          }
         }
       } else {
         // Student Flow
@@ -616,10 +635,10 @@ export default function App() {
 
               <form onSubmit={handleAuthSubmit}>
                 <h2 className="subtitle text-center mb-6">
-                  {loginMode === 'teacher' ? 'Teacher Sign In' : (isRegistering ? 'Create Student Account' : 'Student Sign In')}
+                  {loginMode === 'teacher' ? (isRegistering ? 'Create Teacher Account' : 'Teacher Sign In') : (isRegistering ? 'Create Student Account' : 'Student Sign In')}
                 </h2>
                 
-                {loginMode === 'student' && isRegistering && (
+                {isRegistering && (
                   <div className="input-group">
                     <label className="label">Full Name</label>
                     <div className="input-wrapper">
@@ -646,17 +665,15 @@ export default function App() {
                 </div>
 
                 <button type="submit" disabled={isSubmittingAuth} className="btn btn-primary w-full mt-4">
-                  {isSubmittingAuth ? 'Processing...' : (loginMode === 'teacher' || !isRegistering ? 'Secure Sign In' : 'Complete Registration')} <ArrowRight size={18} />
+                  {isSubmittingAuth ? 'Processing...' : (isRegistering ? 'Complete Registration' : 'Secure Sign In')} <ArrowRight size={18} />
                 </button>
               </form>
 
-              {loginMode === 'student' && (
-                <div className="text-center mt-6">
-                  <button type="button" onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); setAuthForm({ name: '', email: '', password: '' }); }} className="btn-link">
-                    {isRegistering ? "Already have an account? Sign in" : "Don't have an account? Register"}
-                  </button>
-                </div>
-              )}
+              <div className="text-center mt-6">
+                <button type="button" onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); setAuthForm({ name: '', email: '', password: '' }); }} className="btn-link">
+                  {isRegistering ? "Already have an account? Sign in" : "Don't have an account? Register"}
+                </button>
+              </div>
 
             </div>
           </div>
