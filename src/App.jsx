@@ -5,7 +5,6 @@ import {
   Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // --- FIREBASE INITIALIZATION ---
@@ -20,7 +19,6 @@ const firebaseConfig = isPreviewEnv ? JSON.parse(__firebase_config) : {
 };
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : "examBuilder-production";
 
@@ -196,7 +194,7 @@ const styles = `
   
   .empty-state { border: 2px dashed #cbd5e1; padding: 3rem; text-align: center; border-radius: 1rem; background: white; }
   
-  .error-message { background: #fef2f2; color: #ef4444; border: 1px solid #fca5a5; padding: 1rem; border-radius: 0.75rem; font-weight: 600; text-align: center; }
+  .error-message { background: #fef2f2; color: #ef4444; border: 1px solid #fca5a5; padding: 1rem; border-radius: 0.75rem; font-weight: 600; text-align: center; font-size: 0.875rem; }
 
   .status-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
   .status-active { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
@@ -221,7 +219,13 @@ export default function App() {
   // Persistent active session handled locally for multi-device sync
   const [activeSession, setActiveSession] = useState(() => {
     const saved = localStorage.getItem('olyst_session');
-    return saved ? JSON.parse(saved) : null;
+    // FIXED: Added try/catch here to prevent crashes from corrupted local storage (resolves the localhost white screen issue)
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      localStorage.removeItem('olyst_session');
+      return null;
+    }
   });
 
   // Login Form
@@ -253,51 +257,34 @@ export default function App() {
   const [editingExamDetails, setEditingExamDetails] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
 
-  // 1. Initialize Anonymous Auth (Required to satisfy strict DB paths before querying)
+  // 1. Fetch Public Collections (DECOUPLED FROM AUTH - Fixes Incognito Issues)
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (error) {
-        console.error("Auth init error:", error);
-      }
-    };
-    initAuth();
+    // Fetch Teachers
+    const unsubTeachers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'teachers'), (snapshot) => {
+      setTeachersList(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => console.error("Error fetching teachers:", error));
+
+    // Fetch Students
+    const unsubStudents = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'studentProfiles'), (snapshot) => {
+      setStudentProfiles(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => console.error("Error fetching students:", error));
+
+    // Fetch Exams
+    const unsubExams = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'exams'), (snapshot) => {
+      const loadedExams = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      loadedExams.sort((a, b) => b.createdAt - a.createdAt); 
+      setExams(loadedExams);
+    }, (error) => console.error("Error fetching exams:", error));
+
+    // Fetch Questions
+    const unsubQuestions = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'questions'), (snapshot) => {
+      setAllQuestions(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => console.error("Error fetching questions:", error));
+
+    return () => { unsubTeachers(); unsubStudents(); unsubExams(); unsubQuestions(); };
   }, []);
 
-  // 2. Fetch Public Collections Once Authenticated
-  useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        // Fetch Teachers
-        const unsubTeachers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'teachers'), (snapshot) => {
-          setTeachersList(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-        }, (error) => console.error("Error fetching teachers:", error));
-
-        // Fetch Students
-        const unsubStudents = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'studentProfiles'), (snapshot) => {
-          setStudentProfiles(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-        }, (error) => console.error("Error fetching students:", error));
-
-        // Fetch Exams
-        const unsubExams = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'exams'), (snapshot) => {
-          const loadedExams = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          loadedExams.sort((a, b) => b.createdAt - a.createdAt); 
-          setExams(loadedExams);
-        }, (error) => console.error("Error fetching exams:", error));
-
-        // Fetch Questions
-        const unsubQuestions = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'questions'), (snapshot) => {
-          setAllQuestions(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-        }, (error) => console.error("Error fetching questions:", error));
-
-        return () => { unsubTeachers(); unsubStudents(); unsubExams(); unsubQuestions(); };
-      }
-    });
-    return () => unsubscribeAuth();
-  }, []);
-
-  // 3. Routing based on Active Session
+  // 2. Routing based on Active Session
   useEffect(() => {
     if (activeSession) {
       setAppState(activeSession.role === 'teacher' ? 'admin' : 'home');
@@ -306,7 +293,7 @@ export default function App() {
     }
   }, [activeSession]);
 
-  // 4. Fetch private results for logged in Student
+  // 3. Fetch private results for logged in Student
   useEffect(() => {
     if (activeSession && activeSession.role === 'student') {
       const q = collection(db, 'artifacts', appId, 'users', activeSession.studentId, 'results');
@@ -422,7 +409,8 @@ export default function App() {
       }
     } catch (err) {
       console.error("Auth Error:", err);
-      setAuthError("Database operation failed. Ensure Firebase rules are fully public.");
+      // FIXED: Shows exact error so you don't have to guess what's wrong if it fails again
+      setAuthError(`Database Error: ${err.message}`);
     } finally {
       setIsSubmittingAuth(false);
     }
