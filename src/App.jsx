@@ -1,13 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Clock, ChevronLeft, ChevronRight, Check, X, AlertTriangle, Calculator, 
+  Clock, ChevronLeft, ChevronRight, Check, X, Calculator, 
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
-  Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText,
+  Award, Settings, Plus, Save, BookOpen, FileText,
   BarChart, Lightbulb, Shuffle, Eye
 } from 'lucide-react';
+import * as LucideIcons from 'lucide-react'; // Fallback import to prevent strict-mode crashes
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+
+// --- SAFE ICON FALLBACKS ---
+// This prevents the entire app from crashing if 'lucide-react' renames icons in newer versions
+const EditIcon = LucideIcons.Pencil || LucideIcons.Edit2 || LucideIcons.Edit || LucideIcons.Pen || (() => <span style={{fontSize: '1em'}}>✏️</span>);
+const TrashIcon = LucideIcons.Trash || LucideIcons.Trash2 || (() => <span style={{fontSize: '1em'}}>🗑️</span>);
+const AlertIcon = LucideIcons.TriangleAlert || LucideIcons.AlertTriangle || LucideIcons.AlertCircle || (() => <span style={{fontSize: '1em'}}>⚠️</span>);
+
 
 // --- FIREBASE INITIALIZATION ---
 const isPreviewEnv = typeof __firebase_config !== 'undefined' && __firebase_config;
@@ -400,7 +408,7 @@ export default function App() {
     setAuthError('');
     setIsSubmittingAuth(true);
 
-    // Using String coercion to ensure we never run .toLowerCase() on undefined/null data.
+    // Defensive string check for bad database records
     const userEmail = String(authForm.email || '').toLowerCase().trim();
     const userPassword = authForm.password;
 
@@ -483,10 +491,10 @@ export default function App() {
 
     let preppedQuestions = rawQuestions;
     if (mode === 'timed') {
-      // Anti-Cheat: Shuffle questions and options
+      // Anti-Cheat: Shuffle questions and options safely
       preppedQuestions = shuffleArray(rawQuestions.map(q => ({
         ...q,
-        options: shuffleArray([...q.options])
+        options: shuffleArray([...(q.options || [])])
       })));
     }
 
@@ -499,10 +507,10 @@ export default function App() {
   };
 
   const handleSelectOption = (optionId) => {
-    if (examMode === 'study' && answers[sessionQuestions[currentQIndex].id]) {
+    if (examMode === 'study' && answers[sessionQuestions[currentQIndex]?.id]) {
       return; // Lock answer in study mode after selection
     }
-    setAnswers({ ...answers, [sessionQuestions[currentQIndex].id]: optionId });
+    setAnswers({ ...answers, [sessionQuestions[currentQIndex]?.id]: optionId });
   };
 
   const finishExam = async () => {
@@ -546,7 +554,7 @@ export default function App() {
   };
 
   const handleAttemptSubmit = () => {
-    const unansweredCount = sessionQuestions.length - Object.keys(answers).length;
+    const unansweredCount = sessionQuestions.length - Object.keys(answers || {}).length;
     if (unansweredCount > 0 && examMode === 'timed') {
       setShowSubmitModal(true);
     } else {
@@ -779,7 +787,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-2">
-                    {exams.map(exam => {
+                    {(Array.isArray(exams) ? exams : []).map(exam => {
                       const qCount = allQuestions.filter(q => q.examId === exam.id).length;
                       return (
                         <div key={exam.id} className="exam-card">
@@ -792,8 +800,8 @@ export default function App() {
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
-                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><Edit2 size={16} /></button>
-                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><Trash2 size={16} /></button>
+                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><EditIcon size={16} /></button>
+                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><TrashIcon size={16} /></button>
                             </div>
                           </div>
                           <p className="text-muted line-clamp-2 mt-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
@@ -821,8 +829,8 @@ export default function App() {
                 </div>
 
                 {(() => {
-                  const examResults = allResults.filter(r => r.examId === selectedExam.id);
-                  const avgScore = examResults.length ? Math.round(examResults.reduce((acc, r) => acc + r.percentage, 0) / examResults.length) : 0;
+                  const examResults = (Array.isArray(allResults) ? allResults : []).filter(r => r.examId === selectedExam.id);
+                  const avgScore = examResults.length ? Math.round(examResults.reduce((acc, r) => acc + (r.percentage || 0), 0) / examResults.length) : 0;
                   
                   return (
                     <>
@@ -845,16 +853,16 @@ export default function App() {
                             <h3 className="subtitle" style={{ margin: 0 }}>Student Submissions</h3>
                           </div>
                           <div>
-                            {examResults.sort((a, b) => b.timestamp - a.timestamp).map((result, idx) => (
+                            {examResults.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map((result, idx) => (
                               <div key={idx} className="admin-list-item items-center justify-between">
                                 <div>
                                   <div className="font-bold">{result.studentName || 'Unknown Student'}</div>
-                                  <div className="text-muted" style={{ fontSize: '0.875rem' }}>Taken {new Date(result.timestamp).toLocaleString()}</div>
+                                  <div className="text-muted" style={{ fontSize: '0.875rem' }}>Taken {new Date(result.timestamp || Date.now()).toLocaleString()}</div>
                                 </div>
                                 <div className="flex items-center gap-4">
                                   <div className="text-right">
-                                    <div className={`font-bold text-xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage}%</div>
-                                    <div className="text-muted" style={{ fontSize: '0.75rem' }}>{result.score} / {result.total} pts</div>
+                                    <div className={`font-bold text-xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage || 0}%</div>
+                                    <div className="text-muted" style={{ fontSize: '0.75rem' }}>{result.score || 0} / {result.total || 0} pts</div>
                                   </div>
                                   <button onClick={() => { setSelectedStudentResult(result); setAdminView('student_review'); }} className="btn btn-outline" style={{ padding: '0.5rem 1rem' }}>
                                     <Eye size={16} /> <span className="hidden-sm">Review</span>
@@ -880,14 +888,14 @@ export default function App() {
                     <p className="text-muted">Viewing responses for <strong>{selectedExam.title}</strong></p>
                   </div>
                   <div className="text-right">
-                    <div className={`font-bold text-3xl ${selectedStudentResult.percentage >= 80 ? 'text-success' : selectedStudentResult.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{selectedStudentResult.percentage}%</div>
-                    <div className="text-muted font-bold" style={{ fontSize: '0.875rem' }}>{selectedStudentResult.score} / {selectedStudentResult.total} correct</div>
+                    <div className={`font-bold text-3xl ${selectedStudentResult.percentage >= 80 ? 'text-success' : selectedStudentResult.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{selectedStudentResult.percentage || 0}%</div>
+                    <div className="text-muted font-bold" style={{ fontSize: '0.875rem' }}>{selectedStudentResult.score || 0} / {selectedStudentResult.total || 0} correct</div>
                   </div>
                 </div>
 
                 {!selectedStudentResult.answers && (
                   <div className="error-message mb-6" style={{ background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' }}>
-                    <AlertTriangle size={20} style={{ display: 'inline-block', marginBottom: '-4px', marginRight: '8px' }} />
+                    <AlertIcon size={20} style={{ display: 'inline-block', marginBottom: '-4px', marginRight: '8px' }} />
                     Detailed response data is not available for this submission (taken before the tracking update).
                   </div>
                 )}
@@ -899,7 +907,7 @@ export default function App() {
                     const isSkipped = userAnswer === undefined;
                     
                     return (
-                      <div key={q.id} className="review-item">
+                      <div key={q.id || idx} className="review-item">
                         <div className={`review-header ${isCorrect ? 'correct' : isSkipped ? '' : 'incorrect'}`}>
                           <div className={`review-icon ${isCorrect ? 'bg-success' : isSkipped ? 'bg-muted' : 'bg-danger'}`}>
                             {isCorrect ? <Check size={16} /> : isSkipped ? <span style={{ fontSize: '1rem' }}>-</span> : <X size={16} />}
@@ -907,16 +915,16 @@ export default function App() {
                           Question {idx + 1}: {isCorrect ? 'Correct' : isSkipped ? 'Skipped' : 'Incorrect'}
                         </div>
                         <div className="review-body">
-                          <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q.topic}</div>
-                          <p className="subtitle mb-6">{q.text}</p>
+                          <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q?.topic || ''}</div>
+                          <p className="subtitle mb-6">{q?.text || ''}</p>
                           <div className="grid grid-cols-2 mb-6">
-                            {(q.options || []).map(opt => {
-                              const isThisUserChoice = userAnswer === opt.id;
-                              const isThisCorrectChoice = q.correctId === opt.id;
+                            {(Array.isArray(q?.options) ? q.options : []).map((opt, oIdx) => {
+                              const isThisUserChoice = userAnswer === opt?.id;
+                              const isThisCorrectChoice = q.correctId === opt?.id;
                               return (
-                                <div key={opt.id} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
-                                  <div className="font-bold shrink-0">{opt.id}.</div>
-                                  <div className="flex-1">{opt.text}</div>
+                                <div key={opt?.id || oIdx} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
+                                  <div className="font-bold shrink-0">{opt?.id || '?'}.</div>
+                                  <div className="flex-1">{opt?.text || ''}</div>
                                   {isThisCorrectChoice && <Check size={18} className="shrink-0" />}
                                   {isThisUserChoice && !isCorrect && <X size={18} className="shrink-0" />}
                                 </div>
@@ -979,7 +987,7 @@ export default function App() {
                   </div>
                   <button onClick={openNewQuestion} className="btn btn-primary w-full-sm"><Plus size={18} /> Add Question</button>
                 </div>
-                {currentQuestions.length === 0 ? (
+                {getExamQuestionsFromDB().length === 0 ? (
                   <div className="empty-state">
                     <LayoutGrid size={48} className="text-muted" style={{ margin: '0 auto 1rem auto', opacity: 0.5 }} />
                     <h3 className="subtitle">No questions yet</h3>
@@ -988,28 +996,31 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                    {currentQuestions.map((q, idx) => (
-                      <div key={q.id} className="admin-list-item flex-col-sm">
-                        <div className="flex gap-4 flex-1 w-full-sm">
-                          <div className="item-number">{idx + 1}</div>
-                          <div className="flex-1">
-                            <div className="text-muted font-bold mb-2" style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>{q.topic}</div>
-                            <p style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '1rem' }}>{q.text}</p>
-                            <div className="grid grid-cols-2 gap-2" style={{ fontSize: '0.875rem' }}>
-                              {(q.options || []).map(opt => (
-                                <div key={opt.id} style={{ padding: '0.5rem', border: '1px solid', borderColor: q.correctId === opt.id ? '#bbf7d0' : '#e2e8f0', backgroundColor: q.correctId === opt.id ? '#f0fdf4' : 'white', borderRadius: '0.5rem', color: q.correctId === opt.id ? '#166534' : '#475569' }}>
-                                  <strong>{opt.id}.</strong> {opt.text}
-                                </div>
-                              ))}
+                    {getExamQuestionsFromDB().map((q, idx) => {
+                      const optionsArray = Array.isArray(q?.options) ? q.options : [];
+                      return (
+                        <div key={q?.id || idx} className="admin-list-item flex-col-sm">
+                          <div className="flex gap-4 flex-1 w-full-sm">
+                            <div className="item-number">{idx + 1}</div>
+                            <div className="flex-1">
+                              <div className="text-muted font-bold mb-2" style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>{q?.topic || 'No Topic'}</div>
+                              <p style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '1rem' }}>{q?.text || 'No text provided'}</p>
+                              <div className="grid grid-cols-2 gap-2" style={{ fontSize: '0.875rem' }}>
+                                {optionsArray.map((opt, oIdx) => (
+                                  <div key={opt?.id || oIdx} style={{ padding: '0.5rem', border: '1px solid', borderColor: q?.correctId === opt?.id ? '#bbf7d0' : '#e2e8f0', backgroundColor: q?.correctId === opt?.id ? '#f0fdf4' : 'white', borderRadius: '0.5rem', color: q?.correctId === opt?.id ? '#166534' : '#475569' }}>
+                                    <strong>{opt?.id || '?'}.</strong> {opt?.text || ''}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><EditIcon size={20} /></button>
+                            <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><TrashIcon size={20} /></button>
+                          </div>
                         </div>
-                        <div className="flex gap-2">
-                          <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><Edit2 size={20} /></button>
-                          <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><Trash2 size={20} /></button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </>
@@ -1019,7 +1030,7 @@ export default function App() {
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div className="nav">
                   <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Edit2 size={20} color="#2563eb" /> {editingQuestion.isNew ? "Create Question" : "Edit Question"}
+                    <EditIcon size={20} color="#2563eb" /> {editingQuestion.isNew ? "Create Question" : "Edit Question"}
                   </h2>
                   <button onClick={() => { setEditingQuestion(null); setAdminView('manage_questions'); }} className="btn-icon"><X size={24} /></button>
                 </div>
@@ -1033,10 +1044,10 @@ export default function App() {
                       <label className="label">Question Text</label>
                       <textarea required rows={3} value={editingQuestion.text || ''} onChange={e => setEditingQuestion({...editingQuestion, text: e.target.value})} className="input no-icon" placeholder="What is the question?" />
                     </div>
-                    {(editingQuestion.options || []).map((opt, i) => (
-                      <div className="input-group" key={opt.id || i}>
-                        <label className="label">Option {opt.id || '?'}</label>
-                        <input required type="text" value={opt.text || ''} onChange={e => { const newOpts = [...(editingQuestion.options || [])]; if(newOpts[i]) newOpts[i].text = e.target.value; setEditingQuestion({...editingQuestion, options: newOpts}); }} className="input no-icon" style={{ borderColor: editingQuestion.correctId === opt.id ? '#22c55e' : '#cbd5e1', backgroundColor: editingQuestion.correctId === opt.id ? '#f0fdf4' : 'white' }} />
+                    {(Array.isArray(editingQuestion?.options) ? editingQuestion.options : []).map((opt, i) => (
+                      <div className="input-group" key={opt?.id || i}>
+                        <label className="label">Option {opt?.id || '?'}</label>
+                        <input required type="text" value={opt?.text || ''} onChange={e => { const newOpts = [...(editingQuestion.options || [])]; if(newOpts[i]) newOpts[i].text = e.target.value; setEditingQuestion({...editingQuestion, options: newOpts}); }} className="input no-icon" style={{ borderColor: editingQuestion.correctId === opt?.id ? '#22c55e' : '#cbd5e1', backgroundColor: editingQuestion.correctId === opt?.id ? '#f0fdf4' : 'white' }} />
                       </div>
                     ))}
                     <div className="input-group col-span-2" style={{ background: '#eff6ff', padding: '1rem', borderRadius: '0.75rem', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -1081,7 +1092,7 @@ export default function App() {
                 <div className="empty-state">No exams are currently available. Please check back later.</div>
               ) : (
                 <div className="grid grid-cols-3">
-                  {activeExams.map(exam => {
+                  {(Array.isArray(activeExams) ? activeExams : []).map(exam => {
                     const qCount = allQuestions.filter(q => q.examId === exam.id).length;
                     return (
                       <div key={exam.id} className="exam-card">
@@ -1108,18 +1119,18 @@ export default function App() {
                 </div>
               ) : (
                 <div>
-                  {pastResults.map(result => (
+                  {(Array.isArray(pastResults) ? pastResults : []).map(result => (
                     <div key={result.id} className="history-item">
                       <div className="flex items-center gap-4">
                         <div className="history-icon"><Calendar size={20} /></div>
                         <div>
                           <p className="font-bold">{result.examTitle || 'Practice Exam'}</p>
-                          <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Taken on {new Date(result.timestamp).toLocaleDateString()}</p>
+                          <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Taken on {new Date(result.timestamp || Date.now()).toLocaleDateString()}</p>
                         </div>
                       </div>
                       <div className="text-right card" style={{ padding: '0.75rem 1rem', minWidth: '100px' }}>
-                        <p className={`font-bold text-2xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage}%</p>
-                        <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{result.score} / {result.total}</p>
+                        <p className={`font-bold text-2xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage || 0}%</p>
+                        <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{result.score || 0} / {result.total || 0}</p>
                       </div>
                     </div>
                   ))}
@@ -1175,7 +1186,7 @@ export default function App() {
 
     if (appState === 'exam' && sessionQuestions[currentQIndex]) {
       const currentQuestion = sessionQuestions[currentQIndex];
-      const hasAnsweredCurrent = answers[currentQuestion.id] !== undefined;
+      const hasAnsweredCurrent = answers[currentQuestion?.id] !== undefined;
 
       return (
         <div className="min-h-screen">
@@ -1193,39 +1204,39 @@ export default function App() {
           <main className="container flex-col" style={{ flex: 1 }}>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.25rem' }}>{currentQuestion.topic}</div>
+                <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.25rem' }}>{currentQuestion?.topic || ''}</div>
                 <h2 className="subtitle text-muted">Question {currentQIndex + 1} of {sessionQuestions.length}</h2>
               </div>
             </div>
             
             <div className="question-box">
-              <p style={{ fontSize: '1.25rem', fontWeight: 500 }}>{currentQuestion.text}</p>
+              <p style={{ fontSize: '1.25rem', fontWeight: 500 }}>{currentQuestion?.text || ''}</p>
             </div>
             
             <div className="mb-8">
-              {(currentQuestion.options || []).map(option => {
-                const isSelected = answers[currentQuestion.id] === option.id;
+              {(Array.isArray(currentQuestion?.options) ? currentQuestion.options : []).map((option, optIdx) => {
+                const isSelected = answers[currentQuestion?.id] === option?.id;
                 
                 // Extra styling for Study Mode
                 let studyModeClass = '';
                 if (examMode === 'study' && hasAnsweredCurrent) {
-                  if (option.id === currentQuestion.correctId) studyModeClass = 'border-color: #22c55e; background: #f0fdf4;';
+                  if (option?.id === currentQuestion.correctId) studyModeClass = 'border-color: #22c55e; background: #f0fdf4;';
                   else if (isSelected) studyModeClass = 'border-color: #ef4444; background: #fef2f2;';
                   else studyModeClass = 'opacity: 0.5;';
                 }
 
                 return (
                   <button 
-                    key={option.id} 
-                    onClick={() => handleSelectOption(option.id)} 
+                    key={option?.id || optIdx} 
+                    onClick={() => handleSelectOption(option?.id)} 
                     disabled={examMode === 'study' && hasAnsweredCurrent}
                     className={`option-btn ${isSelected ? 'selected' : ''}`}
                     style={studyModeClass ? { cssText: studyModeClass } : {}}
                   >
-                    <div className="option-letter">{option.id}</div>
-                    <span className="flex-1">{option.text}</span>
-                    {examMode === 'study' && hasAnsweredCurrent && option.id === currentQuestion.correctId && <Check color="#166534" size={24} />}
-                    {examMode === 'study' && hasAnsweredCurrent && isSelected && option.id !== currentQuestion.correctId && <X color="#991b1b" size={24} />}
+                    <div className="option-letter">{option?.id || '?'}</div>
+                    <span className="flex-1">{option?.text || ''}</span>
+                    {examMode === 'study' && hasAnsweredCurrent && option?.id === currentQuestion.correctId && <Check color="#166534" size={24} />}
+                    {examMode === 'study' && hasAnsweredCurrent && isSelected && option?.id !== currentQuestion.correctId && <X color="#991b1b" size={24} />}
                   </button>
                 );
               })}
@@ -1235,7 +1246,7 @@ export default function App() {
             {examMode === 'study' && hasAnsweredCurrent && (
               <div className="card mb-8" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
                 <h3 className="subtitle flex items-center gap-2 mb-2" style={{ color: '#b45309' }}><Lightbulb size={20} /> Explanation</h3>
-                <p style={{ color: '#92400e' }}>{currentQuestion.explanation}</p>
+                <p style={{ color: '#92400e' }}>{currentQuestion?.explanation || 'No explanation provided.'}</p>
               </div>
             )}
             
@@ -1243,8 +1254,8 @@ export default function App() {
               <button className="btn btn-outline w-full-sm" disabled={currentQIndex === 0} onClick={() => setCurrentQIndex(prev => prev - 1)}><ChevronLeft size={20}/> Previous</button>
               
               <div className="progress-grid hidden-sm">
-                {sessionQuestions.map((q, idx) => (
-                  <button key={q.id} onClick={() => setCurrentQIndex(idx)} className={`progress-dot ${currentQIndex === idx ? 'current' : ''} ${answers[q.id] ? 'answered' : ''}`}>{idx + 1}</button>
+                {(Array.isArray(sessionQuestions) ? sessionQuestions : []).map((q, idx) => (
+                  <button key={q?.id || idx} onClick={() => setCurrentQIndex(idx)} className={`progress-dot ${currentQIndex === idx ? 'current' : ''} ${answers[q?.id] ? 'answered' : ''}`}>{idx + 1}</button>
                 ))}
               </div>
               
@@ -1260,13 +1271,13 @@ export default function App() {
             <div className="modal-overlay">
               <div className="modal-content">
                 <div className="flex items-center justify-center gap-4 mb-4 text-warning">
-                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertTriangle size={32} /></div>
+                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertIcon size={32} /></div>
                 </div>
                 <h3 className="title">Unanswered Questions</h3>
-                <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{sessionQuestions.length - Object.keys(answers).length}</strong> unanswered questions. Are you sure you want to finish?</p>
+                <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{sessionQuestions.length - Object.keys(answers || {}).length}</strong> unanswered questions. Are you sure you want to finish?</p>
                 <div className="flex gap-3 justify-center flex-col-sm">
                   <button onClick={() => setShowSubmitModal(false)} className="btn btn-outline w-full-sm">Return to Exam</button>
-                  <button onClick={finishExam} className="btn btn-primary w-full-sm">Submit Anyway</button>
+                  <button onClick={finishExam} className="btn btn-primary w-full-sm">Finish Anyway</button>
                 </div>
               </div>
             </div>
@@ -1280,7 +1291,8 @@ export default function App() {
       
       // Calculate Topic Insights
       const topicStats = {};
-      sessionQuestions.forEach(q => {
+      (Array.isArray(sessionQuestions) ? sessionQuestions : []).forEach(q => {
+        if (!q || !q.topic) return;
         if (!topicStats[q.topic]) topicStats[q.topic] = { total: 0, correct: 0 };
         topicStats[q.topic].total++;
         if (answers[q.id] === q.correctId) topicStats[q.topic].correct++;
@@ -1327,13 +1339,13 @@ export default function App() {
 
             <h3 className="title mb-6 flex items-center gap-3"><BookOpen size={24} color="#2563eb" /> Detailed Review</h3>
             <div>
-              {sessionQuestions.map((q, idx) => {
-                const userAnswer = answers[q.id];
-                const isCorrect = userAnswer === q.correctId;
+              {(Array.isArray(sessionQuestions) ? sessionQuestions : []).map((q, idx) => {
+                const userAnswer = answers[q?.id];
+                const isCorrect = userAnswer === q?.correctId;
                 const isSkipped = userAnswer === undefined;
                 
                 return (
-                  <div key={q.id} className="review-item">
+                  <div key={q?.id || idx} className="review-item">
                     <div className={`review-header ${isCorrect ? 'correct' : isSkipped ? '' : 'incorrect'}`}>
                       <div className={`review-icon ${isCorrect ? 'bg-success' : isSkipped ? 'bg-muted' : 'bg-danger'}`}>
                         {isCorrect ? <Check size={16} /> : isSkipped ? <span style={{ fontSize: '1rem' }}>-</span> : <X size={16} />}
@@ -1341,16 +1353,16 @@ export default function App() {
                       Question {idx + 1}: {isCorrect ? 'Correct' : isSkipped ? 'Skipped' : 'Incorrect'}
                     </div>
                     <div className="review-body">
-                      <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q.topic}</div>
-                      <p className="subtitle mb-6">{q.text}</p>
+                      <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q?.topic || ''}</div>
+                      <p className="subtitle mb-6">{q?.text || ''}</p>
                       <div className="grid grid-cols-2 mb-6">
-                        {(q.options || []).map(opt => {
-                          const isThisUserChoice = userAnswer === opt.id;
-                          const isThisCorrectChoice = q.correctId === opt.id;
+                        {(Array.isArray(q?.options) ? q.options : []).map((opt, oIdx) => {
+                          const isThisUserChoice = userAnswer === opt?.id;
+                          const isThisCorrectChoice = q?.correctId === opt?.id;
                           return (
-                            <div key={opt.id} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
-                              <div className="font-bold shrink-0">{opt.id}.</div>
-                              <div className="flex-1">{opt.text}</div>
+                            <div key={opt?.id || oIdx} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
+                              <div className="font-bold shrink-0">{opt?.id || '?'}.</div>
+                              <div className="flex-1">{opt?.text || ''}</div>
                               {isThisCorrectChoice && <Check size={18} className="shrink-0" />}
                               {isThisUserChoice && !isCorrect && <X size={18} className="shrink-0" />}
                             </div>
@@ -1359,7 +1371,7 @@ export default function App() {
                       </div>
                       <div className="review-explanation">
                         <strong style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>Explanation</strong>
-                        {q.explanation}
+                        {q?.explanation || 'No explanation provided.'}
                       </div>
                     </div>
                   </div>
