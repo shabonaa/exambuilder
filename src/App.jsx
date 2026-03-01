@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Clock, ChevronLeft, ChevronRight, Check, X, AlertTriangle, Calculator, 
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
-  Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText,
+  Award, Settings, Plus, Trash, Pencil, Save, BookOpen, FileText,
   BarChart, Lightbulb, Shuffle, Eye
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
@@ -60,6 +60,38 @@ const shuffleArray = (array) => {
   }
   return shuffled;
 };
+
+// --- ERROR BOUNDARY ---
+// This prevents the entire screen from going white if a small icon or element fails to render.
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '3rem', textAlign: 'center', fontFamily: 'system-ui, sans-serif' }}>
+          <h2 style={{ color: '#ef4444', marginBottom: '1rem' }}>Something went wrong.</h2>
+          <p style={{ color: '#64748b' }}>We encountered an unexpected error displaying this page.</p>
+          <pre style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '0.5rem', overflowX: 'auto', textAlign: 'left', marginTop: '2rem', color: '#0f172a' }}>
+            {this.state.error?.toString()}
+          </pre>
+          <button 
+            onClick={() => window.location.reload()} 
+            style={{ marginTop: '2rem', padding: '0.75rem 1.5rem', background: '#2563eb', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            Refresh Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // --- NATIVE CSS ---
 const styles = `
@@ -368,13 +400,14 @@ export default function App() {
     setAuthError('');
     setIsSubmittingAuth(true);
 
-    const userEmail = authForm.email.toLowerCase().trim();
+    // Using String coercion to ensure we never run .toLowerCase() on undefined/null data.
+    const userEmail = String(authForm.email || '').toLowerCase().trim();
     const userPassword = authForm.password;
 
     try {
       if (loginMode === 'teacher') {
         if (isRegistering) {
-          const existingTeacher = teachersList.find(t => t.email?.toLowerCase() === userEmail);
+          const existingTeacher = teachersList.find(t => String(t.email || '').toLowerCase() === userEmail);
           if (existingTeacher) {
             setAuthError("This email is already registered as a teacher. Please sign in.");
           } else {
@@ -386,7 +419,7 @@ export default function App() {
             setActiveSession(session);
           }
         } else {
-          const teacher = teachersList.find(t => t.email?.toLowerCase() === userEmail && t.password === userPassword);
+          const teacher = teachersList.find(t => String(t.email || '').toLowerCase() === userEmail && t.password === userPassword);
           if (teacher) {
             const session = { role: 'teacher', name: teacher.name || 'Teacher', email: userEmail, studentId: 'teacher' };
             localStorage.setItem('olyst_session', JSON.stringify(session));
@@ -397,7 +430,7 @@ export default function App() {
         }
       } else {
         if (isRegistering) {
-          const existingStudent = studentProfiles.find(s => s.email?.toLowerCase() === userEmail);
+          const existingStudent = studentProfiles.find(s => String(s.email || '').toLowerCase() === userEmail);
           if (existingStudent) {
             setAuthError("This email is already registered. Please click 'Sign in' instead.");
           } else {
@@ -410,7 +443,7 @@ export default function App() {
             setActiveSession(session);
           }
         } else {
-          const student = studentProfiles.find(s => s.email?.toLowerCase() === userEmail && s.password === userPassword);
+          const student = studentProfiles.find(s => String(s.email || '').toLowerCase() === userEmail && s.password === userPassword);
           if (student) {
             const session = { role: 'student', name: student.name, email: userEmail, studentId: student.studentId };
             localStorage.setItem('olyst_session', JSON.stringify(session));
@@ -599,9 +632,13 @@ export default function App() {
     if (!selectedExam) return;
     const questionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions');
     const qData = {
-      examId: selectedExam.id, topic: editingQuestion.topic, text: editingQuestion.text,
-      options: editingQuestion.options, correctId: editingQuestion.correctId,
-      explanation: editingQuestion.explanation, order: editingQuestion.order || Date.now()
+      examId: selectedExam.id, 
+      topic: editingQuestion.topic || '', 
+      text: editingQuestion.text || '',
+      options: editingQuestion.options || [], 
+      correctId: editingQuestion.correctId || 'A',
+      explanation: editingQuestion.explanation || '', 
+      order: editingQuestion.order || Date.now()
     };
 
     try {
@@ -755,8 +792,8 @@ export default function App() {
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
-                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><Edit2 size={16} /></button>
-                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><Trash2 size={16} /></button>
+                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><Pencil size={16} /></button>
+                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><Trash size={16} /></button>
                             </div>
                           </div>
                           <p className="text-muted line-clamp-2 mt-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
@@ -873,7 +910,7 @@ export default function App() {
                           <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q.topic}</div>
                           <p className="subtitle mb-6">{q.text}</p>
                           <div className="grid grid-cols-2 mb-6">
-                            {q.options.map(opt => {
+                            {(q.options || []).map(opt => {
                               const isThisUserChoice = userAnswer === opt.id;
                               const isThisCorrectChoice = q.correctId === opt.id;
                               return (
@@ -905,15 +942,15 @@ export default function App() {
                 <form onSubmit={saveExamDetails} style={{ padding: '2rem' }}>
                   <div className="input-group">
                     <label className="label">Exam Title</label>
-                    <input required type="text" value={editingExamDetails.title} onChange={e => setEditingExamDetails({...editingExamDetails, title: e.target.value})} className="input no-icon" placeholder="e.g. Midterm Assessment" />
+                    <input required type="text" value={editingExamDetails.title || ''} onChange={e => setEditingExamDetails({...editingExamDetails, title: e.target.value})} className="input no-icon" placeholder="e.g. Midterm Assessment" />
                   </div>
                   <div className="input-group">
                     <label className="label">Description</label>
-                    <textarea required rows={3} value={editingExamDetails.description} onChange={e => setEditingExamDetails({...editingExamDetails, description: e.target.value})} className="input no-icon" placeholder="Provide instructions..." />
+                    <textarea required rows={3} value={editingExamDetails.description || ''} onChange={e => setEditingExamDetails({...editingExamDetails, description: e.target.value})} className="input no-icon" placeholder="Provide instructions..." />
                   </div>
                   <div className="input-group mb-6">
                     <label className="label">Time Limit (Minutes)</label>
-                    <input required type="number" min="1" max="300" value={editingExamDetails.timeLimit} onChange={e => setEditingExamDetails({...editingExamDetails, timeLimit: e.target.value})} className="input no-icon" />
+                    <input required type="number" min="1" max="300" value={editingExamDetails.timeLimit || 30} onChange={e => setEditingExamDetails({...editingExamDetails, timeLimit: e.target.value})} className="input no-icon" />
                   </div>
 
                   <label className="checkbox-wrapper">
@@ -959,7 +996,7 @@ export default function App() {
                             <div className="text-muted font-bold mb-2" style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>{q.topic}</div>
                             <p style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '1rem' }}>{q.text}</p>
                             <div className="grid grid-cols-2 gap-2" style={{ fontSize: '0.875rem' }}>
-                              {q.options.map(opt => (
+                              {(q.options || []).map(opt => (
                                 <div key={opt.id} style={{ padding: '0.5rem', border: '1px solid', borderColor: q.correctId === opt.id ? '#bbf7d0' : '#e2e8f0', backgroundColor: q.correctId === opt.id ? '#f0fdf4' : 'white', borderRadius: '0.5rem', color: q.correctId === opt.id ? '#166534' : '#475569' }}>
                                   <strong>{opt.id}.</strong> {opt.text}
                                 </div>
@@ -968,8 +1005,8 @@ export default function App() {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><Edit2 size={20} /></button>
-                          <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><Trash2 size={20} /></button>
+                          <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><Pencil size={20} /></button>
+                          <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><Trash size={20} /></button>
                         </div>
                       </div>
                     ))}
@@ -982,7 +1019,7 @@ export default function App() {
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div className="nav">
                   <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Edit2 size={20} color="#2563eb" /> {editingQuestion.isNew ? "Create Question" : "Edit Question"}
+                    <Pencil size={20} color="#2563eb" /> {editingQuestion.isNew ? "Create Question" : "Edit Question"}
                   </h2>
                   <button onClick={() => { setEditingQuestion(null); setAdminView('manage_questions'); }} className="btn-icon"><X size={24} /></button>
                 </div>
@@ -990,27 +1027,27 @@ export default function App() {
                   <div className="admin-form-grid mb-6">
                     <div className="input-group col-span-2">
                       <label className="label">Topic / Category</label>
-                      <input required type="text" value={editingQuestion.topic} onChange={e => setEditingQuestion({...editingQuestion, topic: e.target.value})} className="input no-icon" placeholder="e.g. Algebra" />
+                      <input required type="text" value={editingQuestion.topic || ''} onChange={e => setEditingQuestion({...editingQuestion, topic: e.target.value})} className="input no-icon" placeholder="e.g. Algebra" />
                     </div>
                     <div className="input-group col-span-2">
                       <label className="label">Question Text</label>
-                      <textarea required rows={3} value={editingQuestion.text} onChange={e => setEditingQuestion({...editingQuestion, text: e.target.value})} className="input no-icon" placeholder="What is the question?" />
+                      <textarea required rows={3} value={editingQuestion.text || ''} onChange={e => setEditingQuestion({...editingQuestion, text: e.target.value})} className="input no-icon" placeholder="What is the question?" />
                     </div>
-                    {editingQuestion.options.map((opt, i) => (
-                      <div className="input-group" key={opt.id}>
-                        <label className="label">Option {opt.id}</label>
-                        <input required type="text" value={opt.text} onChange={e => { const newOpts = [...editingQuestion.options]; newOpts[i].text = e.target.value; setEditingQuestion({...editingQuestion, options: newOpts}); }} className="input no-icon" style={{ borderColor: editingQuestion.correctId === opt.id ? '#22c55e' : '#cbd5e1', backgroundColor: editingQuestion.correctId === opt.id ? '#f0fdf4' : 'white' }} />
+                    {(editingQuestion.options || []).map((opt, i) => (
+                      <div className="input-group" key={opt.id || i}>
+                        <label className="label">Option {opt.id || '?'}</label>
+                        <input required type="text" value={opt.text || ''} onChange={e => { const newOpts = [...(editingQuestion.options || [])]; if(newOpts[i]) newOpts[i].text = e.target.value; setEditingQuestion({...editingQuestion, options: newOpts}); }} className="input no-icon" style={{ borderColor: editingQuestion.correctId === opt.id ? '#22c55e' : '#cbd5e1', backgroundColor: editingQuestion.correctId === opt.id ? '#f0fdf4' : 'white' }} />
                       </div>
                     ))}
                     <div className="input-group col-span-2" style={{ background: '#eff6ff', padding: '1rem', borderRadius: '0.75rem', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                       <label className="label" style={{ margin: 0, color: '#1e3a8a' }}>Correct Answer:</label>
-                      <select value={editingQuestion.correctId} onChange={e => setEditingQuestion({...editingQuestion, correctId: e.target.value})} className="input no-icon" style={{ width: 'auto', fontWeight: 'bold', color: '#1d4ed8', padding: '0.5rem 2rem 0.5rem 1rem' }}>
+                      <select value={editingQuestion.correctId || 'A'} onChange={e => setEditingQuestion({...editingQuestion, correctId: e.target.value})} className="input no-icon" style={{ width: 'auto', fontWeight: 'bold', color: '#1d4ed8', padding: '0.5rem 2rem 0.5rem 1rem' }}>
                         <option value="A">Option A</option><option value="B">Option B</option><option value="C">Option C</option><option value="D">Option D</option>
                       </select>
                     </div>
                     <div className="input-group col-span-2 mb-0">
                       <label className="label">Explanation (Shown after exam)</label>
-                      <textarea required rows={2} value={editingQuestion.explanation} onChange={e => setEditingQuestion({...editingQuestion, explanation: e.target.value})} className="input no-icon" placeholder="Explain why the answer is correct..." />
+                      <textarea required rows={2} value={editingQuestion.explanation || ''} onChange={e => setEditingQuestion({...editingQuestion, explanation: e.target.value})} className="input no-icon" placeholder="Explain why the answer is correct..." />
                     </div>
                   </div>
                   <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
@@ -1166,7 +1203,7 @@ export default function App() {
             </div>
             
             <div className="mb-8">
-              {currentQuestion.options.map(option => {
+              {(currentQuestion.options || []).map(option => {
                 const isSelected = answers[currentQuestion.id] === option.id;
                 
                 // Extra styling for Study Mode
@@ -1307,7 +1344,7 @@ export default function App() {
                       <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q.topic}</div>
                       <p className="subtitle mb-6">{q.text}</p>
                       <div className="grid grid-cols-2 mb-6">
-                        {q.options.map(opt => {
+                        {(q.options || []).map(opt => {
                           const isThisUserChoice = userAnswer === opt.id;
                           const isThisCorrectChoice = q.correctId === opt.id;
                           return (
@@ -1337,9 +1374,9 @@ export default function App() {
   };
 
   return (
-    <>
+    <ErrorBoundary>
       <style>{styles}</style>
       {renderContent()}
-    </>
+    </ErrorBoundary>
   );
 }
