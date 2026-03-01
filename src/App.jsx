@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   Clock, ChevronLeft, ChevronRight, Check, X, AlertTriangle, Calculator, 
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
-  Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText
+  Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText,
+  BarChart, Lightbulb, Shuffle, Eye
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // --- FIREBASE INITIALIZATION ---
@@ -19,6 +21,7 @@ const firebaseConfig = isPreviewEnv ? JSON.parse(__firebase_config) : {
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : "examBuilder-production";
 
@@ -47,6 +50,16 @@ const DEFAULT_QUESTIONS = [
     correctId: "C", explanation: "Using the Pythagorean theorem (a² + b² = c²): 5² + b² = 13². 25 + b² = 169. b² = 144, so b = 12."
   }
 ];
+
+// --- UTILITY: SHUFFLE ARRAY ---
+const shuffleArray = (array) => {
+  let shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
 
 // --- NATIVE CSS ---
 const styles = `
@@ -142,8 +155,9 @@ const styles = `
   
   .question-box { background: white; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 2rem; margin-bottom: 1.5rem; }
   .option-btn { width: 100%; text-align: left; padding: 1.25rem; border: 2px solid #e2e8f0; background: white; border-radius: 0.75rem; margin-bottom: 0.75rem; cursor: pointer; display: flex; align-items: center; font-size: 1.125rem; transition: 0.2s; outline: none; }
-  .option-btn:hover { border-color: #bfdbfe; background: #f8fafc; }
+  .option-btn:hover:not(:disabled) { border-color: #bfdbfe; background: #f8fafc; }
   .option-btn.selected { border-color: #2563eb; background: #eff6ff; }
+  .option-btn:disabled { cursor: default; }
   .option-letter { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border: 2px solid #cbd5e1; border-radius: 0.5rem; margin-right: 1rem; font-weight: 700; background: #f1f5f9; color: #64748b; }
   .option-btn.selected .option-letter { background: #2563eb; color: white; border-color: #2563eb; }
   
@@ -202,6 +216,9 @@ const styles = `
   .checkbox-wrapper { display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-bottom: 1.5rem; background: #f8fafc; padding: 1rem; border-radius: 0.75rem; border: 1px solid #e2e8f0; text-align: left; }
   .checkbox { width: 1.25rem; height: 1.25rem; cursor: pointer; accent-color: #2563eb; }
 
+  .stat-bar-bg { width: 100%; background: #e2e8f0; border-radius: 999px; height: 0.75rem; overflow: hidden; margin-top: 0.5rem; }
+  .stat-bar-fill { height: 100%; transition: width 0.5s ease-out; }
+
   @media (max-width: 640px) {
     .nav { padding: 1rem; }
     .container { padding: 1rem; }
@@ -219,7 +236,6 @@ export default function App() {
   // Persistent active session handled locally for multi-device sync
   const [activeSession, setActiveSession] = useState(() => {
     const saved = localStorage.getItem('olyst_session');
-    // FIXED: Added try/catch here to prevent crashes from corrupted local storage (resolves the localhost white screen issue)
     try {
       return saved ? JSON.parse(saved) : null;
     } catch (e) {
@@ -240,10 +256,13 @@ export default function App() {
   const [studentProfiles, setStudentProfiles] = useState([]);
   const [exams, setExams] = useState([]);
   const [allQuestions, setAllQuestions] = useState([]);
+  const [allResults, setAllResults] = useState([]); // For teacher analytics
   
-  // Personal Data
+  // Personal Data & Active Exam State
   const [pastResults, setPastResults] = useState([]);
   const [selectedExam, setSelectedExam] = useState(null);
+  const [sessionQuestions, setSessionQuestions] = useState([]); // Shuffled active questions
+  const [examMode, setExamMode] = useState('timed'); // 'timed' or 'study'
 
   // Student Exam Session State
   const [currentQIndex, setCurrentQIndex] = useState(0);
@@ -253,11 +272,12 @@ export default function App() {
   const [currentScore, setCurrentScore] = useState({ score: 0, percentage: 0 });
 
   // Admin Builder State
-  const [adminView, setAdminView] = useState('list_exams'); 
+  const [adminView, setAdminView] = useState('list_exams'); // 'list_exams', 'edit_exam_details', 'manage_questions', 'edit_question', 'analytics', 'student_review'
   const [editingExamDetails, setEditingExamDetails] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
+  const [selectedStudentResult, setSelectedStudentResult] = useState(null); // Used to view individual student response
 
-  // 1. Fetch Public Collections (DECOUPLED FROM AUTH - Fixes Incognito Issues)
+  // 1. Fetch Public Collections
   useEffect(() => {
     // Fetch Teachers
     const unsubTeachers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'teachers'), (snapshot) => {
@@ -281,13 +301,19 @@ export default function App() {
       setAllQuestions(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => console.error("Error fetching questions:", error));
 
-    return () => { unsubTeachers(); unsubStudents(); unsubExams(); unsubQuestions(); };
+    // Fetch Global Results (for Analytics)
+    const unsubAllResults = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'allResults'), (snapshot) => {
+      setAllResults(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => console.error("Error fetching global results:", error));
+
+    return () => { unsubTeachers(); unsubStudents(); unsubExams(); unsubQuestions(); unsubAllResults(); };
   }, []);
 
   // 2. Routing based on Active Session
   useEffect(() => {
     if (activeSession) {
       setAppState(activeSession.role === 'teacher' ? 'admin' : 'home');
+      setAdminView('list_exams');
     } else {
       setAppState('login');
     }
@@ -312,15 +338,15 @@ export default function App() {
   // Timer Logic
   useEffect(() => {
     let timer;
-    if (appState === 'exam' && timeLeft > 0) {
+    if (appState === 'exam' && examMode === 'timed' && timeLeft > 0) {
       timer = setInterval(() => {
         setTimeLeft((prev) => prev - 1);
       }, 1000);
-    } else if (appState === 'exam' && timeLeft === 0) {
+    } else if (appState === 'exam' && examMode === 'timed' && timeLeft === 0) {
       finishExam();
     }
     return () => clearInterval(timer);
-  }, [appState, timeLeft]);
+  }, [appState, timeLeft, examMode]);
 
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60);
@@ -328,14 +354,12 @@ export default function App() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const getCurrentExamQuestions = () => {
+  const getExamQuestionsFromDB = () => {
     if (!selectedExam) return [];
     return allQuestions
       .filter(q => q.examId === selectedExam.id)
       .sort((a, b) => a.order - b.order);
   };
-
-  const currentQuestions = getCurrentExamQuestions();
 
   // --- Core Form Handlers ---
 
@@ -350,24 +374,18 @@ export default function App() {
     try {
       if (loginMode === 'teacher') {
         if (isRegistering) {
-          // Use optional chaining (?.) to prevent crashing if a database document has no email field
           const existingTeacher = teachersList.find(t => t.email?.toLowerCase() === userEmail);
           if (existingTeacher) {
             setAuthError("This email is already registered as a teacher. Please sign in.");
           } else {
-            // Register new teacher
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'teachers'), {
-              email: userEmail,
-              password: userPassword,
-              name: authForm.name,
-              createdAt: Date.now()
+              email: userEmail, password: userPassword, name: authForm.name, createdAt: Date.now()
             });
             const session = { role: 'teacher', name: authForm.name, email: userEmail, studentId: 'teacher' };
             localStorage.setItem('olyst_session', JSON.stringify(session));
             setActiveSession(session);
           }
         } else {
-          // Sign in existing teacher, using optional chaining (?.)
           const teacher = teachersList.find(t => t.email?.toLowerCase() === userEmail && t.password === userPassword);
           if (teacher) {
             const session = { role: 'teacher', name: teacher.name || 'Teacher', email: userEmail, studentId: 'teacher' };
@@ -378,21 +396,14 @@ export default function App() {
           }
         }
       } else {
-        // Student Flow
         if (isRegistering) {
-          // Use optional chaining (?.) for students as well to be safe
           const existingStudent = studentProfiles.find(s => s.email?.toLowerCase() === userEmail);
           if (existingStudent) {
             setAuthError("This email is already registered. Please click 'Sign in' instead.");
           } else {
-            // Generate a persistent cross-device identifier for this student
             const newStudentId = `stu_${Date.now()}`;
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'studentProfiles'), {
-              email: userEmail,
-              password: userPassword,
-              name: authForm.name,
-              studentId: newStudentId,
-              createdAt: Date.now()
+              email: userEmail, password: userPassword, name: authForm.name, studentId: newStudentId, createdAt: Date.now()
             });
             const session = { role: 'student', name: authForm.name, email: userEmail, studentId: newStudentId };
             localStorage.setItem('olyst_session', JSON.stringify(session));
@@ -411,7 +422,6 @@ export default function App() {
       }
     } catch (err) {
       console.error("Auth Error:", err);
-      // FIXED: Shows exact error so you don't have to guess what's wrong if it fails again
       setAuthError(`Database Error: ${err.message}`);
     } finally {
       setIsSubmittingAuth(false);
@@ -434,36 +444,65 @@ export default function App() {
     setAppState('exam_intro');
   };
 
-  const startExam = () => {
-    if (currentQuestions.length === 0) return;
+  const startExam = (mode) => {
+    const rawQuestions = getExamQuestionsFromDB();
+    if (rawQuestions.length === 0) return;
+
+    let preppedQuestions = rawQuestions;
+    if (mode === 'timed') {
+      // Anti-Cheat: Shuffle questions and options
+      preppedQuestions = shuffleArray(rawQuestions.map(q => ({
+        ...q,
+        options: shuffleArray([...q.options])
+      })));
+    }
+
+    setSessionQuestions(preppedQuestions);
+    setExamMode(mode);
     setAppState('exam');
-    setTimeLeft((selectedExam.timeLimit || 30) * 60);
+    setTimeLeft(mode === 'timed' ? (selectedExam.timeLimit || 30) * 60 : 0);
     setAnswers({});
     setCurrentQIndex(0);
   };
 
   const handleSelectOption = (optionId) => {
-    setAnswers({ ...answers, [currentQuestions[currentQIndex].id]: optionId });
+    if (examMode === 'study' && answers[sessionQuestions[currentQIndex].id]) {
+      return; // Lock answer in study mode after selection
+    }
+    setAnswers({ ...answers, [sessionQuestions[currentQIndex].id]: optionId });
   };
 
   const finishExam = async () => {
     let score = 0;
-    currentQuestions.forEach(q => {
+    sessionQuestions.forEach(q => {
       if (answers[q.id] === q.correctId) score++;
     });
-    const percentage = Math.round((score / currentQuestions.length) * 100);
+    const percentage = Math.round((score / sessionQuestions.length) * 100);
     setCurrentScore({ score, percentage });
 
-    if (activeSession && activeSession.role === 'student') {
+    // Only save results for actual Timed Exams, not Study Mode
+    if (activeSession && activeSession.role === 'student' && examMode === 'timed') {
       try {
-        await addDoc(collection(db, 'artifacts', appId, 'users', activeSession.studentId, 'results'), {
+        const resultData = {
           examId: selectedExam.id,
           examTitle: selectedExam.title,
           score,
-          total: currentQuestions.length,
+          total: sessionQuestions.length,
           percentage,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          answers // Saving answers mapping to database so teachers can review it
+        };
+
+        // 1. Save to personal history
+        await addDoc(collection(db, 'artifacts', appId, 'users', activeSession.studentId, 'results'), resultData);
+        
+        // 2. Save globally for Teacher Analytics
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'allResults'), {
+          ...resultData,
+          studentName: activeSession.name,
+          studentId: activeSession.studentId
         });
+
       } catch (err) {
         console.error("Error saving result:", err);
       }
@@ -474,8 +513,8 @@ export default function App() {
   };
 
   const handleAttemptSubmit = () => {
-    const unansweredCount = currentQuestions.length - Object.keys(answers).length;
-    if (unansweredCount > 0) {
+    const unansweredCount = sessionQuestions.length - Object.keys(answers).length;
+    if (unansweredCount > 0 && examMode === 'timed') {
       setShowSubmitModal(true);
     } else {
       finishExam();
@@ -509,7 +548,6 @@ export default function App() {
 
   const saveExamDetails = async (e) => {
     e.preventDefault();
-    
     const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams');
     const examData = {
       title: editingExamDetails.title,
@@ -559,7 +597,6 @@ export default function App() {
   const saveQuestion = async (e) => {
     e.preventDefault();
     if (!selectedExam) return;
-    
     const questionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions');
     const qData = {
       examId: selectedExam.id, topic: editingQuestion.topic, text: editingQuestion.text,
@@ -717,6 +754,7 @@ export default function App() {
                               </span>
                             </div>
                             <div className="flex gap-2">
+                              <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
                               <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><Edit2 size={16} /></button>
                               <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><Trash2 size={16} /></button>
                             </div>
@@ -732,6 +770,127 @@ export default function App() {
                     })}
                   </div>
                 )}
+              </>
+            )}
+
+            {adminView === 'analytics' && selectedExam && (
+              <>
+                <button onClick={() => { setSelectedExam(null); setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Exams</button>
+                <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
+                  <div>
+                    <h1 className="title">Class Analytics</h1>
+                    <p className="text-muted">Viewing results for <strong>{selectedExam.title}</strong></p>
+                  </div>
+                </div>
+
+                {(() => {
+                  const examResults = allResults.filter(r => r.examId === selectedExam.id);
+                  const avgScore = examResults.length ? Math.round(examResults.reduce((acc, r) => acc + r.percentage, 0) / examResults.length) : 0;
+                  
+                  return (
+                    <>
+                      <div className="grid grid-cols-2 mb-6">
+                        <div className="card text-center" style={{ padding: '1.5rem' }}>
+                          <div className="text-muted font-bold mb-2">AVERAGE SCORE</div>
+                          <div className={`text-4xl font-bold ${avgScore >= 80 ? 'text-success' : avgScore >= 50 ? 'text-warning' : 'text-danger'}`}>{avgScore}%</div>
+                        </div>
+                        <div className="card text-center" style={{ padding: '1.5rem' }}>
+                          <div className="text-muted font-bold mb-2">TOTAL SUBMISSIONS</div>
+                          <div className="text-4xl font-bold text-primary">{examResults.length}</div>
+                        </div>
+                      </div>
+
+                      {examResults.length === 0 ? (
+                        <div className="empty-state">No students have taken this exam yet.</div>
+                      ) : (
+                        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                          <div className="card-header" style={{ margin: 0, borderRadius: 0, padding: '1rem 1.5rem', textAlign: 'left' }}>
+                            <h3 className="subtitle" style={{ margin: 0 }}>Student Submissions</h3>
+                          </div>
+                          <div>
+                            {examResults.sort((a, b) => b.timestamp - a.timestamp).map((result, idx) => (
+                              <div key={idx} className="admin-list-item items-center justify-between">
+                                <div>
+                                  <div className="font-bold">{result.studentName || 'Unknown Student'}</div>
+                                  <div className="text-muted" style={{ fontSize: '0.875rem' }}>Taken {new Date(result.timestamp).toLocaleString()}</div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <div className="text-right">
+                                    <div className={`font-bold text-xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage}%</div>
+                                    <div className="text-muted" style={{ fontSize: '0.75rem' }}>{result.score} / {result.total} pts</div>
+                                  </div>
+                                  <button onClick={() => { setSelectedStudentResult(result); setAdminView('student_review'); }} className="btn btn-outline" style={{ padding: '0.5rem 1rem' }}>
+                                    <Eye size={16} /> <span className="hidden-sm">Review</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </>
+            )}
+
+            {adminView === 'student_review' && selectedStudentResult && (
+              <>
+                <button onClick={() => { setSelectedStudentResult(null); setAdminView('analytics'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Analytics</button>
+                <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
+                  <div>
+                    <h1 className="title">Review: {selectedStudentResult.studentName}</h1>
+                    <p className="text-muted">Viewing responses for <strong>{selectedExam.title}</strong></p>
+                  </div>
+                  <div className="text-right">
+                    <div className={`font-bold text-3xl ${selectedStudentResult.percentage >= 80 ? 'text-success' : selectedStudentResult.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{selectedStudentResult.percentage}%</div>
+                    <div className="text-muted font-bold" style={{ fontSize: '0.875rem' }}>{selectedStudentResult.score} / {selectedStudentResult.total} correct</div>
+                  </div>
+                </div>
+
+                {!selectedStudentResult.answers && (
+                  <div className="error-message mb-6" style={{ background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' }}>
+                    <AlertTriangle size={20} style={{ display: 'inline-block', marginBottom: '-4px', marginRight: '8px' }} />
+                    Detailed response data is not available for this submission (taken before the tracking update).
+                  </div>
+                )}
+
+                <div>
+                  {getExamQuestionsFromDB().map((q, idx) => {
+                    const userAnswer = selectedStudentResult.answers ? selectedStudentResult.answers[q.id] : undefined;
+                    const isCorrect = userAnswer === q.correctId;
+                    const isSkipped = userAnswer === undefined;
+                    
+                    return (
+                      <div key={q.id} className="review-item">
+                        <div className={`review-header ${isCorrect ? 'correct' : isSkipped ? '' : 'incorrect'}`}>
+                          <div className={`review-icon ${isCorrect ? 'bg-success' : isSkipped ? 'bg-muted' : 'bg-danger'}`}>
+                            {isCorrect ? <Check size={16} /> : isSkipped ? <span style={{ fontSize: '1rem' }}>-</span> : <X size={16} />}
+                          </div>
+                          Question {idx + 1}: {isCorrect ? 'Correct' : isSkipped ? 'Skipped' : 'Incorrect'}
+                        </div>
+                        <div className="review-body">
+                          <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q.topic}</div>
+                          <p className="subtitle mb-6">{q.text}</p>
+                          <div className="grid grid-cols-2 mb-6">
+                            {q.options.map(opt => {
+                              const isThisUserChoice = userAnswer === opt.id;
+                              const isThisCorrectChoice = q.correctId === opt.id;
+                              return (
+                                <div key={opt.id} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
+                                  <div className="font-bold shrink-0">{opt.id}.</div>
+                                  <div className="flex-1">{opt.text}</div>
+                                  {isThisCorrectChoice && <Check size={18} className="shrink-0" />}
+                                  {isThisUserChoice && !isCorrect && <X size={18} className="shrink-0" />}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </>
             )}
 
@@ -936,6 +1095,7 @@ export default function App() {
     }
 
     if (appState === 'exam_intro' && selectedExam) {
+      const qCount = getExamQuestionsFromDB().length;
       return (
         <div className="min-h-screen">
           <nav className="nav">
@@ -948,34 +1108,56 @@ export default function App() {
               <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>{selectedExam.description}</p>
               
               <div className="flex justify-center items-center gap-4 mb-8 flex-col-sm">
-                <div className="badge" style={{ padding: '1rem 2rem', fontSize: '1rem' }}><LayoutGrid size={20} color="#3b82f6"/> {currentQuestions.length} Questions</div>
+                <div className="badge" style={{ padding: '1rem 2rem', fontSize: '1rem' }}><LayoutGrid size={20} color="#3b82f6"/> {qCount} Questions</div>
                 <div className="badge" style={{ padding: '1rem 2rem', fontSize: '1rem' }}><Clock size={20} color="#3b82f6"/> {selectedExam.timeLimit} Minutes</div>
               </div>
               
-              <button onClick={startExam} disabled={currentQuestions.length === 0} className="btn btn-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.125rem' }}>
-                {currentQuestions.length === 0 ? 'Exam Not Ready' : 'Start Assessment Now'}
-              </button>
+              {qCount === 0 ? (
+                <button disabled className="btn btn-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.125rem' }}>Exam Not Ready</button>
+              ) : (
+                <div className="grid grid-cols-2 mt-4">
+                  <div className="card" style={{ background: '#f8fafc', border: '2px solid #e2e8f0', boxShadow: 'none' }}>
+                    <Shuffle size={32} color="#2563eb" style={{ margin: '0 auto 1rem' }} />
+                    <h3 className="subtitle">Timed Exam</h3>
+                    <p className="text-muted mb-4" style={{ fontSize: '0.875rem' }}>Timer active. Questions and options are shuffled to prevent cheating. Score is saved.</p>
+                    <button onClick={() => startExam('timed')} className="btn btn-primary w-full">Start Exam</button>
+                  </div>
+                  <div className="card" style={{ background: '#fffbeb', border: '2px solid #fde68a', boxShadow: 'none' }}>
+                    <Lightbulb size={32} color="#d97706" style={{ margin: '0 auto 1rem' }} />
+                    <h3 className="subtitle">Study Mode</h3>
+                    <p className="text-muted mb-4" style={{ fontSize: '0.875rem' }}>No timer. Get immediate explanations after each answer. Score is not saved to history.</p>
+                    <button onClick={() => startExam('study')} className="btn btn-outline w-full" style={{ borderColor: '#fcd34d', color: '#b45309', background: '#fff' }}>Start Practice</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       );
     }
 
-    if (appState === 'exam' && currentQuestions[currentQIndex]) {
-      const currentQuestion = currentQuestions[currentQIndex];
+    if (appState === 'exam' && sessionQuestions[currentQIndex]) {
+      const currentQuestion = sessionQuestions[currentQIndex];
+      const hasAnsweredCurrent = answers[currentQuestion.id] !== undefined;
+
       return (
         <div className="min-h-screen">
           <header className="nav">
-            <div className="nav-brand flex-1"><Calculator color="#2563eb" size={24}/> <span className="hidden-sm">{selectedExam.title}</span></div>
-            <div className={`timer mx-4 ${timeLeft < 300 ? 'urgent' : ''}`}><Clock size={18}/> {formatTime(timeLeft)}</div>
-            <button className="btn btn-secondary" onClick={handleAttemptSubmit}>Submit</button>
+            <div className="nav-brand flex-1">
+              {examMode === 'study' ? <Lightbulb color="#d97706" size={24}/> : <Calculator color="#2563eb" size={24}/>} 
+              <span className="hidden-sm">{selectedExam.title} {examMode === 'study' && '(Practice)'}</span>
+            </div>
+            {examMode === 'timed' && (
+              <div className={`timer mx-4 ${timeLeft < 300 ? 'urgent' : ''}`}><Clock size={18}/> {formatTime(timeLeft)}</div>
+            )}
+            <button className="btn btn-secondary" onClick={handleAttemptSubmit}>Finish</button>
           </header>
           
           <main className="container flex-col" style={{ flex: 1 }}>
             <div className="flex justify-between items-center mb-6">
               <div>
                 <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.25rem' }}>{currentQuestion.topic}</div>
-                <h2 className="subtitle text-muted">Question {currentQIndex + 1} of {currentQuestions.length}</h2>
+                <h2 className="subtitle text-muted">Question {currentQIndex + 1} of {sessionQuestions.length}</h2>
               </div>
             </div>
             
@@ -986,25 +1168,50 @@ export default function App() {
             <div className="mb-8">
               {currentQuestion.options.map(option => {
                 const isSelected = answers[currentQuestion.id] === option.id;
+                
+                // Extra styling for Study Mode
+                let studyModeClass = '';
+                if (examMode === 'study' && hasAnsweredCurrent) {
+                  if (option.id === currentQuestion.correctId) studyModeClass = 'border-color: #22c55e; background: #f0fdf4;';
+                  else if (isSelected) studyModeClass = 'border-color: #ef4444; background: #fef2f2;';
+                  else studyModeClass = 'opacity: 0.5;';
+                }
+
                 return (
-                  <button key={option.id} onClick={() => handleSelectOption(option.id)} className={`option-btn ${isSelected ? 'selected' : ''}`}>
+                  <button 
+                    key={option.id} 
+                    onClick={() => handleSelectOption(option.id)} 
+                    disabled={examMode === 'study' && hasAnsweredCurrent}
+                    className={`option-btn ${isSelected ? 'selected' : ''}`}
+                    style={studyModeClass ? { cssText: studyModeClass } : {}}
+                  >
                     <div className="option-letter">{option.id}</div>
-                    <span>{option.text}</span>
+                    <span className="flex-1">{option.text}</span>
+                    {examMode === 'study' && hasAnsweredCurrent && option.id === currentQuestion.correctId && <Check color="#166534" size={24} />}
+                    {examMode === 'study' && hasAnsweredCurrent && isSelected && option.id !== currentQuestion.correctId && <X color="#991b1b" size={24} />}
                   </button>
                 );
               })}
             </div>
+
+            {/* Study Mode Explanation Box */}
+            {examMode === 'study' && hasAnsweredCurrent && (
+              <div className="card mb-8" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
+                <h3 className="subtitle flex items-center gap-2 mb-2" style={{ color: '#b45309' }}><Lightbulb size={20} /> Explanation</h3>
+                <p style={{ color: '#92400e' }}>{currentQuestion.explanation}</p>
+              </div>
+            )}
             
             <div className="progress-nav flex-col-sm gap-4">
               <button className="btn btn-outline w-full-sm" disabled={currentQIndex === 0} onClick={() => setCurrentQIndex(prev => prev - 1)}><ChevronLeft size={20}/> Previous</button>
               
               <div className="progress-grid hidden-sm">
-                {currentQuestions.map((q, idx) => (
+                {sessionQuestions.map((q, idx) => (
                   <button key={q.id} onClick={() => setCurrentQIndex(idx)} className={`progress-dot ${currentQIndex === idx ? 'current' : ''} ${answers[q.id] ? 'answered' : ''}`}>{idx + 1}</button>
                 ))}
               </div>
               
-              {currentQIndex === currentQuestions.length - 1 ? (
+              {currentQIndex === sessionQuestions.length - 1 ? (
                 <button className="btn btn-primary w-full-sm" onClick={handleAttemptSubmit}>Finish <Check size={20}/></button>
               ) : (
                 <button className="btn btn-secondary w-full-sm" onClick={() => setCurrentQIndex(prev => prev + 1)}>Next <ChevronRight size={20}/></button>
@@ -1019,10 +1226,10 @@ export default function App() {
                   <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertTriangle size={32} /></div>
                 </div>
                 <h3 className="title">Unanswered Questions</h3>
-                <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{currentQuestions.length - Object.keys(answers).length}</strong> unanswered questions. Are you sure you want to submit?</p>
+                <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{sessionQuestions.length - Object.keys(answers).length}</strong> unanswered questions. Are you sure you want to finish?</p>
                 <div className="flex gap-3 justify-center flex-col-sm">
                   <button onClick={() => setShowSubmitModal(false)} className="btn btn-outline w-full-sm">Return to Exam</button>
-                  <button onClick={finishExam} className="btn btn-primary w-full-sm">Submit Anyway</button>
+                  <button onClick={finishExam} className="btn btn-primary w-full-sm">Finish Anyway</button>
                 </div>
               </div>
             </div>
@@ -1033,25 +1240,57 @@ export default function App() {
 
     if (appState === 'results') {
       const { score, percentage } = currentScore;
+      
+      // Calculate Topic Insights
+      const topicStats = {};
+      sessionQuestions.forEach(q => {
+        if (!topicStats[q.topic]) topicStats[q.topic] = { total: 0, correct: 0 };
+        topicStats[q.topic].total++;
+        if (answers[q.id] === q.correctId) topicStats[q.topic].correct++;
+      });
+
       return (
         <div className="min-h-screen">
           <div className="container">
             <div className="card text-center mb-8">
               <h1 className="title mb-2">Exam Completed</h1>
-              <p className="text-muted mb-8">Your score for <strong>{selectedExam.title}</strong> has been saved.</p>
+              <p className="text-muted mb-8">
+                {examMode === 'study' ? "You have finished this practice session." : `Your score for ${selectedExam.title} has been saved.`}
+              </p>
               
               <div className="result-circle">
                 <div className="result-score" style={{ color: percentage >= 80 ? '#22c55e' : percentage >= 50 ? '#f59e0b' : '#ef4444' }}>{score}</div>
-                <div className="text-muted font-bold">out of {currentQuestions.length}</div>
+                <div className="text-muted font-bold">out of {sessionQuestions.length}</div>
               </div>
               
               <h2 className={`title mb-8 ${percentage >= 80 ? 'text-success' : percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{percentage}% Score</h2>
               <button onClick={() => { setSelectedExam(null); setAppState('home'); }} className="btn btn-secondary">Return to Dashboard</button>
             </div>
 
+            {/* Feature: Skill Breakdown (Topic Insights) */}
+            <h3 className="title mb-6 flex items-center gap-3"><BarChart size={24} color="#2563eb" /> Skill Breakdown</h3>
+            <div className="grid grid-cols-2 mb-8">
+              {Object.keys(topicStats).map(topic => {
+                const stat = topicStats[topic];
+                const topicPct = Math.round((stat.correct / stat.total) * 100);
+                return (
+                  <div key={topic} className="card" style={{ padding: '1.5rem' }}>
+                    <div className="flex justify-between items-center mb-2">
+                      <strong style={{ color: '#0f172a' }}>{topic}</strong>
+                      <span className="font-bold" style={{ color: topicPct >= 80 ? '#166534' : topicPct >= 50 ? '#b45309' : '#991b1b' }}>{topicPct}%</span>
+                    </div>
+                    <div className="text-muted" style={{ fontSize: '0.875rem' }}>{stat.correct} of {stat.total} correct</div>
+                    <div className="stat-bar-bg">
+                      <div className="stat-bar-fill" style={{ width: `${topicPct}%`, background: topicPct >= 80 ? '#22c55e' : topicPct >= 50 ? '#f59e0b' : '#ef4444' }}></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
             <h3 className="title mb-6 flex items-center gap-3"><BookOpen size={24} color="#2563eb" /> Detailed Review</h3>
             <div>
-              {currentQuestions.map((q, idx) => {
+              {sessionQuestions.map((q, idx) => {
                 const userAnswer = answers[q.id];
                 const isCorrect = userAnswer === q.correctId;
                 const isSkipped = userAnswer === undefined;
@@ -1065,6 +1304,7 @@ export default function App() {
                       Question {idx + 1}: {isCorrect ? 'Correct' : isSkipped ? 'Skipped' : 'Incorrect'}
                     </div>
                     <div className="review-body">
+                      <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q.topic}</div>
                       <p className="subtitle mb-6">{q.text}</p>
                       <div className="grid grid-cols-2 mb-6">
                         {q.options.map(opt => {
