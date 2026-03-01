@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Clock, ChevronLeft, ChevronRight, Check, X, AlertTriangle, Calculator, 
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
-  Award, Settings, Plus, Trash, Pencil, Save, BookOpen, FileText,
+  Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText,
   BarChart, Lightbulb, Shuffle, Eye
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
@@ -792,8 +792,8 @@ export default function App() {
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
-                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><Pencil size={16} /></button>
-                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><Trash size={16} /></button>
+                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><Edit2 size={16} /></button>
+                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><Trash2 size={16} /></button>
                             </div>
                           </div>
                           <p className="text-muted line-clamp-2 mt-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
@@ -1005,8 +1005,8 @@ export default function App() {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><Pencil size={20} /></button>
-                          <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><Trash size={20} /></button>
+                          <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><Edit2 size={20} /></button>
+                          <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><Trash2 size={20} /></button>
                         </div>
                       </div>
                     ))}
@@ -1019,7 +1019,7 @@ export default function App() {
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div className="nav">
                   <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Pencil size={20} color="#2563eb" /> {editingQuestion.isNew ? "Create Question" : "Edit Question"}
+                    <Edit2 size={20} color="#2563eb" /> {editingQuestion.isNew ? "Create Question" : "Edit Question"}
                   </h2>
                   <button onClick={() => { setEditingQuestion(null); setAdminView('manage_questions'); }} className="btn-icon"><X size={24} /></button>
                 </div>
@@ -1266,7 +1266,7 @@ export default function App() {
                 <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{sessionQuestions.length - Object.keys(answers).length}</strong> unanswered questions. Are you sure you want to finish?</p>
                 <div className="flex gap-3 justify-center flex-col-sm">
                   <button onClick={() => setShowSubmitModal(false)} className="btn btn-outline w-full-sm">Return to Exam</button>
-                  <button onClick={finishExam} className="btn btn-primary w-full-sm">Finish Anyway</button>
+                  <button onClick={finishExam} className="btn btn-primary w-full-sm">Submit Anyway</button>
                 </div>
               </div>
             </div>
