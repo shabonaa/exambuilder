@@ -3,18 +3,12 @@ import {
   Clock, ChevronLeft, ChevronRight, Check, X, Calculator, 
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
   Award, Settings, Plus, Save, BookOpen, FileText,
-  BarChart, Lightbulb, Shuffle, Eye, Shield, Key
+  BarChart, Lightbulb, Shuffle, Eye, Shield, Key,
+  Pencil, Trash, AlertCircle
 } from 'lucide-react';
-import * as LucideIcons from 'lucide-react'; // Fallback import to prevent strict-mode crashes
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-
-// --- SAFE ICON FALLBACKS ---
-// This prevents the entire app from crashing if 'lucide-react' renames icons in newer versions
-const EditIcon = LucideIcons.Pencil || LucideIcons.Edit2 || LucideIcons.Edit || LucideIcons.Pen || (() => <span style={{fontSize: '1em'}}>✏️</span>);
-const TrashIcon = LucideIcons.Trash || LucideIcons.Trash2 || (() => <span style={{fontSize: '1em'}}>🗑️</span>);
-const AlertIcon = LucideIcons.TriangleAlert || LucideIcons.AlertTriangle || LucideIcons.AlertCircle || (() => <span style={{fontSize: '1em'}}>⚠️</span>);
 
 // --- FIREBASE INITIALIZATION ---
 const isPreviewEnv = typeof __firebase_config !== 'undefined' && __firebase_config;
@@ -985,8 +979,8 @@ export default function App() {
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
-                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><EditIcon size={16} /></button>
-                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><TrashIcon size={16} /></button>
+                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><Pencil size={16} /></button>
+                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><Trash size={16} /></button>
                             </div>
                           </div>
                           <p className="text-muted line-clamp-2 mt-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
@@ -1080,7 +1074,7 @@ export default function App() {
 
                 {!selectedStudentResult.answers && (
                   <div className="error-message mb-6" style={{ background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' }}>
-                    <AlertIcon size={20} style={{ display: 'inline-block', marginBottom: '-4px', marginRight: '8px' }} />
+                    <AlertCircle size={20} style={{ display: 'inline-block', marginBottom: '-4px', marginRight: '8px' }} />
                     Detailed response data is not available for this submission (taken before the tracking update).
                   </div>
                 )}
@@ -1200,8 +1194,8 @@ export default function App() {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><EditIcon size={20} /></button>
-                            <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><TrashIcon size={20} /></button>
+                            <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><Pencil size={20} /></button>
+                            <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><Trash size={20} /></button>
                           </div>
                         </div>
                       );
@@ -1215,7 +1209,7 @@ export default function App() {
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div className="nav">
                   <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <EditIcon size={20} color="#2563eb" /> {editingQuestion.isNew ? "Create Question" : "Edit Question"}
+                    <Pencil size={20} color="#2563eb" /> {editingQuestion.isNew ? "Create Question" : "Edit Question"}
                   </h2>
                   <button onClick={() => { setEditingQuestion(null); setAdminView('manage_questions'); }} className="btn-icon"><X size={24} /></button>
                 </div>
@@ -1456,7 +1450,7 @@ export default function App() {
             <div className="modal-overlay">
               <div className="modal-content">
                 <div className="flex items-center justify-center gap-4 mb-4 text-warning">
-                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertIcon size={32} /></div>
+                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertCircle size={32} /></div>
                 </div>
                 <h3 className="title">Unanswered Questions</h3>
                 <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{sessionQuestions.length - Object.keys(answers || {}).length}</strong> unanswered questions. Are you sure you want to finish?</p>
