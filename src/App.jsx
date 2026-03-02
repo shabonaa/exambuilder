@@ -6,9 +6,16 @@ import {
   BarChart, Lightbulb, Shuffle, Eye, Shield, Key,
   Pencil, Trash, AlertCircle
 } from 'lucide-react';
+import * as LucideIcons from 'lucide-react'; // Fallback import to prevent strict-mode crashes
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+
+// --- SAFE ICON FALLBACKS ---
+// This prevents the entire app from crashing if 'lucide-react' renames icons in newer versions
+const EditIcon = LucideIcons.Pencil || LucideIcons.Edit2 || LucideIcons.Edit || LucideIcons.Pen || (() => <span style={{fontSize: '1em'}}>✏️</span>);
+const TrashIcon = LucideIcons.Trash || LucideIcons.Trash2 || (() => <span style={{fontSize: '1em'}}>🗑️</span>);
+const AlertIcon = LucideIcons.TriangleAlert || LucideIcons.AlertTriangle || LucideIcons.AlertCircle || (() => <span style={{fontSize: '1em'}}>⚠️</span>);
 
 // --- FIREBASE INITIALIZATION ---
 const isPreviewEnv = typeof __firebase_config !== 'undefined' && __firebase_config;
@@ -141,7 +148,7 @@ const styles = `
   .btn-outline:hover:not(:disabled) { background: #f8fafc; }
   .btn-danger { background: #fef2f2; color: #ef4444; border-color: #fca5a5; }
   .btn-danger:hover:not(:disabled) { background: #fee2e2; }
-  .btn-icon { padding: 0.5rem; border-radius: 0.5rem; color: #94a3b8; background: transparent; }
+  .btn-icon { padding: 0.5rem; border-radius: 0.5rem; color: #94a3b8; background: transparent; cursor: pointer; border: none; outline: none; }
   .btn-icon:hover { color: #2563eb; background: #eff6ff; }
   .btn-icon-danger:hover { color: #ef4444; background: #fef2f2; }
   .btn-link { color: #2563eb; font-weight: 600; background: none; border: none; cursor: pointer; padding: 0.5rem; transition: 0.2s; }
@@ -289,7 +296,7 @@ export default function App() {
   // SuperAdmin state
   const [newTeacherForm, setNewTeacherForm] = useState({ name: '', email: '', password: '' });
 
-  // Teacher Change Password state
+  // Password Change state (Unified for Students and Teachers)
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
 
   // Global DB Data
@@ -313,8 +320,9 @@ export default function App() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [currentScore, setCurrentScore] = useState({ score: 0, percentage: 0 });
 
-  // Admin Builder State
+  // Dashboard Views
   const [adminView, setAdminView] = useState('list_exams'); // 'list_exams', 'edit_exam_details', 'manage_questions', 'edit_question', 'analytics', 'student_review', 'change_password'
+  const [homeView, setHomeView] = useState('dashboard'); // 'dashboard', 'change_password'
   const [editingExamDetails, setEditingExamDetails] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [selectedStudentResult, setSelectedStudentResult] = useState(null); 
@@ -366,6 +374,7 @@ export default function App() {
         setAdminView('list_exams');
       } else {
         setAppState('home');
+        setHomeView('dashboard');
       }
     } else {
       setAppState('login');
@@ -454,17 +463,18 @@ export default function App() {
             setAuthError("This email is already registered. Please click 'Sign in' instead.");
           } else {
             const newStudentId = `stu_${Date.now()}`;
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'studentProfiles'), {
+            const newDocRef = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'studentProfiles'), {
               email: userEmail, password: userPassword, name: authForm.name, studentId: newStudentId, createdAt: Date.now()
             });
-            const session = { role: 'student', name: authForm.name, email: userEmail, studentId: newStudentId };
+            // Including userId: newDocRef.id so students can change their passwords
+            const session = { role: 'student', name: authForm.name, email: userEmail, studentId: newStudentId, userId: newDocRef.id };
             localStorage.setItem('olyst_session', JSON.stringify(session));
             setActiveSession(session);
           }
         } else {
           const student = studentProfiles.find(s => String(s.email || '').toLowerCase() === userEmail && s.password === userPassword);
           if (student) {
-            const session = { role: 'student', name: student.name, email: userEmail, studentId: student.studentId };
+            const session = { role: 'student', name: student.name, email: userEmail, studentId: student.studentId, userId: student.id };
             localStorage.setItem('olyst_session', JSON.stringify(session));
             setActiveSession(session);
           } else {
@@ -488,9 +498,11 @@ export default function App() {
     setAuthError('');
     setAuthSuccess('');
     setIsRegistering(false);
+    setHomeView('dashboard');
+    setAdminView('list_exams');
   };
 
-  // --- SuperAdmin Handlers (Register Teachers) ---
+  // --- SuperAdmin Handlers ---
   const handleRegisterTeacher = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -518,7 +530,19 @@ export default function App() {
     }
   };
 
-  // --- Teacher Password Change Handler ---
+  const handleDeleteTeacher = async (teacherId) => {
+    if (!window.confirm("Are you sure you want to delete this teacher account? This action cannot be undone.")) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'teachers', teacherId));
+      setAuthSuccess("Teacher account permanently deleted.");
+      setTimeout(() => setAuthSuccess(''), 3000);
+    } catch (err) {
+      console.error("Error deleting teacher:", err);
+      setAuthError("Failed to delete teacher account.");
+    }
+  };
+
+  // --- Unified Password Change Handler (Students & Teachers) ---
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -529,13 +553,20 @@ export default function App() {
       return;
     }
 
+    if (!activeSession?.userId) {
+      setAuthError("Session expired. Please log out and sign in again to use this feature.");
+      return;
+    }
+
     try {
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'teachers', activeSession.userId);
+      const collectionName = activeSession.role === 'teacher' ? 'teachers' : 'studentProfiles';
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', collectionName, activeSession.userId);
       await updateDoc(docRef, { password: passwordForm.newPassword });
       setAuthSuccess("Your password has been successfully updated!");
       setPasswordForm({ newPassword: '', confirmPassword: '' });
       setTimeout(() => {
-        setAdminView('list_exams');
+        if (activeSession.role === 'teacher') setAdminView('list_exams');
+        else setHomeView('dashboard');
         setAuthSuccess('');
       }, 2500);
     } catch (err) {
@@ -883,7 +914,10 @@ export default function App() {
                            <div className="font-bold">{teacher.name || 'Unnamed Teacher'}</div>
                            <div className="text-muted" style={{ fontSize: '0.875rem' }}>{teacher.email}</div>
                          </div>
-                         <div className="badge">Active</div>
+                         <div className="flex items-center gap-3">
+                           <div className="badge">Active</div>
+                           <button onClick={() => handleDeleteTeacher(teacher.id)} className="btn-icon btn-icon-danger" title="Delete Teacher"><TrashIcon size={18} /></button>
+                         </div>
                        </div>
                      ))
                    )}
@@ -911,7 +945,7 @@ export default function App() {
           </nav>
           <main className="container">
             {adminView === 'change_password' && (
-              <div className="card container-sm" style={{ padding: 0, overflow: 'hidden' }}>
+              <div className="card container-sm" style={{ padding: 0, overflow: 'hidden', margin: '0 auto' }}>
                 <div className="nav">
                   <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Key size={20} color="#2563eb" /> Update Password
@@ -979,8 +1013,8 @@ export default function App() {
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
-                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><Pencil size={16} /></button>
-                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><Trash size={16} /></button>
+                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><EditIcon size={16} /></button>
+                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><TrashIcon size={16} /></button>
                             </div>
                           </div>
                           <p className="text-muted line-clamp-2 mt-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
@@ -1074,7 +1108,7 @@ export default function App() {
 
                 {!selectedStudentResult.answers && (
                   <div className="error-message mb-6" style={{ background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' }}>
-                    <AlertCircle size={20} style={{ display: 'inline-block', marginBottom: '-4px', marginRight: '8px' }} />
+                    <AlertIcon size={20} style={{ display: 'inline-block', marginBottom: '-4px', marginRight: '8px' }} />
                     Detailed response data is not available for this submission (taken before the tracking update).
                   </div>
                 )}
@@ -1194,8 +1228,8 @@ export default function App() {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><Pencil size={20} /></button>
-                            <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><Trash size={20} /></button>
+                            <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><EditIcon size={20} /></button>
+                            <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><TrashIcon size={20} /></button>
                           </div>
                         </div>
                       );
@@ -1209,7 +1243,7 @@ export default function App() {
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div className="nav">
                   <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Pencil size={20} color="#2563eb" /> {editingQuestion.isNew ? "Create Question" : "Edit Question"}
+                    <EditIcon size={20} color="#2563eb" /> {editingQuestion.isNew ? "Create Question" : "Edit Question"}
                   </h2>
                   <button onClick={() => { setEditingQuestion(null); setAdminView('manage_questions'); }} className="btn-icon"><X size={24} /></button>
                 </div>
@@ -1261,62 +1295,100 @@ export default function App() {
             <div className="nav-brand"><Calculator color="#2563eb" size={24} /> Test Exam Student</div>
             <div className="flex items-center gap-4">
               <span className="badge hidden-sm"><User size={16} /> {activeSession?.name}</span>
+              <button onClick={() => { setAuthError(''); setAuthSuccess(''); setHomeView('change_password'); }} className="btn" style={{ padding: '0.5rem 1rem', background: 'rgba(37,99,235,0.1)', color: '#2563eb' }}>
+                <Key size={16} /> <span className="hidden-sm">Password</span>
+              </button>
               <button onClick={handleLogout} className="btn btn-outline" style={{ padding: '0.5rem 1rem' }}><LogOut size={16} /> <span className="hidden-sm">Logout</span></button>
             </div>
           </nav>
-          <div className="container">
-            <div className="mb-8">
-              <h2 className="title flex items-center gap-3 mb-6"><BookOpen size={28} color="#2563eb" /> Available Assessments</h2>
-              {activeExams.length === 0 ? (
-                <div className="empty-state">No exams are currently available. Please check back later.</div>
-              ) : (
-                <div className="grid grid-cols-3">
-                  {(Array.isArray(activeExams) ? activeExams : []).map(exam => {
-                    const qCount = allQuestions.filter(q => q.examId === exam.id).length;
-                    return (
-                      <div key={exam.id} className="exam-card">
-                        <h3 className="subtitle" style={{ marginBottom: '0.5rem' }}>{exam.title}</h3>
-                        <p className="text-muted line-clamp-3" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
-                        <div className="exam-meta">
-                          <div className="flex items-center gap-2"><LayoutGrid size={14} color="#3b82f6"/> {qCount} Questions</div>
-                          <div className="flex items-center gap-2"><Clock size={14} color="#3b82f6"/> {exam.timeLimit} Min</div>
-                        </div>
-                        <button onClick={() => selectExamForTaking(exam)} className="btn btn-outline w-full" style={{ borderColor: '#bfdbfe', color: '#1d4ed8' }}>Select Exam <ChevronRight size={16}/></button>
-                      </div>
-                    );
-                  })}
+          <main className="container">
+            {homeView === 'change_password' ? (
+              <div className="card container-sm" style={{ padding: 0, overflow: 'hidden', margin: '0 auto' }}>
+                <div className="nav">
+                  <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Key size={20} color="#2563eb" /> Update Password
+                  </h2>
+                  <button onClick={() => setHomeView('dashboard')} className="btn-icon"><X size={24} /></button>
                 </div>
-              )}
-            </div>
-            
-            <div className="card">
-              <h2 className="title flex items-center gap-3 mb-6"><History size={28} color="#2563eb" /> Your Exam History</h2>
-              {pastResults.length === 0 ? (
-                <div className="empty-state" style={{ padding: '2rem' }}>
-                  <Award size={32} className="text-muted" style={{ margin: '0 auto 0.5rem auto', opacity: 0.5 }} />
-                  <p>You haven't taken any exams yet.</p>
-                </div>
-              ) : (
-                <div>
-                  {(Array.isArray(pastResults) ? pastResults : []).map(result => (
-                    <div key={result.id} className="history-item">
-                      <div className="flex items-center gap-4">
-                        <div className="history-icon"><Calendar size={20} /></div>
-                        <div>
-                          <p className="font-bold">{result.examTitle || 'Practice Exam'}</p>
-                          <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Taken on {new Date(result.timestamp || Date.now()).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                      <div className="text-right card" style={{ padding: '0.75rem 1rem', minWidth: '100px' }}>
-                        <p className={`font-bold text-2xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage || 0}%</p>
-                        <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{result.score || 0} / {result.total || 0}</p>
-                      </div>
+                <form onSubmit={handleChangePassword} style={{ padding: '2rem' }}>
+                  {authError && <div className="error-message mb-4">{authError}</div>}
+                  {authSuccess && <div className="success-message mb-4">{authSuccess}</div>}
+                  <div className="input-group">
+                    <label className="label">New Password</label>
+                    <div className="input-wrapper">
+                      <Lock size={18} className="input-icon" />
+                      <input type="password" required minLength="6" value={passwordForm.newPassword} onChange={e => setPasswordForm({...passwordForm, newPassword: e.target.value})} className="input" placeholder="Enter new password" />
                     </div>
-                  ))}
+                  </div>
+                  <div className="input-group mb-8">
+                    <label className="label">Confirm New Password</label>
+                    <div className="input-wrapper">
+                      <Lock size={18} className="input-icon" />
+                      <input type="password" required minLength="6" value={passwordForm.confirmPassword} onChange={e => setPasswordForm({...passwordForm, confirmPassword: e.target.value})} className="input" placeholder="Confirm new password" />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
+                    <button type="button" onClick={() => setHomeView('dashboard')} className="btn btn-outline">Cancel</button>
+                    <button type="submit" className="btn btn-primary"><Save size={18} /> Update Password</button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <>
+                <div className="mb-8">
+                  <h2 className="title flex items-center gap-3 mb-6"><BookOpen size={28} color="#2563eb" /> Available Assessments</h2>
+                  {activeExams.length === 0 ? (
+                    <div className="empty-state">No exams are currently available. Please check back later.</div>
+                  ) : (
+                    <div className="grid grid-cols-3">
+                      {(Array.isArray(activeExams) ? activeExams : []).map(exam => {
+                        const qCount = allQuestions.filter(q => q.examId === exam.id).length;
+                        return (
+                          <div key={exam.id} className="exam-card">
+                            <h3 className="subtitle" style={{ marginBottom: '0.5rem' }}>{exam.title}</h3>
+                            <p className="text-muted line-clamp-3" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
+                            <div className="exam-meta">
+                              <div className="flex items-center gap-2"><LayoutGrid size={14} color="#3b82f6"/> {qCount} Questions</div>
+                              <div className="flex items-center gap-2"><Clock size={14} color="#3b82f6"/> {exam.timeLimit} Min</div>
+                            </div>
+                            <button onClick={() => selectExamForTaking(exam)} className="btn btn-outline w-full" style={{ borderColor: '#bfdbfe', color: '#1d4ed8' }}>Select Exam <ChevronRight size={16}/></button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+                
+                <div className="card">
+                  <h2 className="title flex items-center gap-3 mb-6"><History size={28} color="#2563eb" /> Your Exam History</h2>
+                  {pastResults.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '2rem' }}>
+                      <Award size={32} className="text-muted" style={{ margin: '0 auto 0.5rem auto', opacity: 0.5 }} />
+                      <p>You haven't taken any exams yet.</p>
+                    </div>
+                  ) : (
+                    <div>
+                      {(Array.isArray(pastResults) ? pastResults : []).map(result => (
+                        <div key={result.id} className="history-item">
+                          <div className="flex items-center gap-4">
+                            <div className="history-icon"><Calendar size={20} /></div>
+                            <div>
+                              <p className="font-bold">{result.examTitle || 'Practice Exam'}</p>
+                              <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Taken on {new Date(result.timestamp || Date.now()).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <div className="text-right card" style={{ padding: '0.75rem 1rem', minWidth: '100px' }}>
+                            <p className={`font-bold text-2xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage || 0}%</p>
+                            <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{result.score || 0} / {result.total || 0}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </main>
         </div>
       );
     }
@@ -1450,7 +1522,7 @@ export default function App() {
             <div className="modal-overlay">
               <div className="modal-content">
                 <div className="flex items-center justify-center gap-4 mb-4 text-warning">
-                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertCircle size={32} /></div>
+                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertIcon size={32} /></div>
                 </div>
                 <h3 className="title">Unanswered Questions</h3>
                 <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{sessionQuestions.length - Object.keys(answers || {}).length}</strong> unanswered questions. Are you sure you want to finish?</p>
