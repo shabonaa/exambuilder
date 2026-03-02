@@ -9,6 +9,11 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
+// --- ICON ALIASES (Prevents Rendering Crashes) ---
+const EditIcon = Pencil;
+const TrashIcon = Trash;
+const AlertIcon = TriangleAlert;
+
 // --- SECURITY UTILITY: PASSWORD HASHING ---
 const hashPassword = async (password) => {
   const msgBuffer = new TextEncoder().encode(password);
@@ -40,9 +45,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Use the simplest possible base pathing that maps directly to your custom Firestore structure.
-// This prevents the path segments mismatch error.
-const appId = "examBuilder-production";
+// Safely sanitize the app ID so it never generates invalid, nested database collection paths
+const rawAppId = typeof __app_id !== 'undefined' ? String(__app_id) : "examBuilder-production";
+const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '-') || 'default-app-id';
 
 // --- FALLBACK MOCK DATA FOR SEEDING ---
 const DEFAULT_EXAM = {
@@ -1588,7 +1593,7 @@ export default function App() {
             <div className="modal-overlay">
               <div className="modal-content">
                 <div className="flex items-center justify-center gap-4 mb-4 text-warning">
-                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><TriangleAlert size={32} /></div>
+                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertIcon size={32} /></div>
                 </div>
                 <h3 className="title">Unanswered Questions</h3>
                 <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{sessionQuestions.length - Object.keys(answers || {}).length}</strong> unanswered questions. Are you sure you want to finish?</p>
