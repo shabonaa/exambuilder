@@ -1,25 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Clock, ChevronLeft, ChevronRight, Check, X, Calculator, 
+  Clock, ChevronLeft, ChevronRight, Check, X, TriangleAlert, Calculator, 
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
-  Award, Settings, Plus, Save, BookOpen, FileText,
-  BarChart, Lightbulb, Shuffle, Eye, Shield, Key,
-  Pencil, Trash, AlertCircle
+  Award, Settings, Plus, Trash, Pencil, Save, BookOpen, FileText,
+  BarChart, Lightbulb, Shuffle, Eye, Shield, Key
 } from 'lucide-react';
-import * as LucideIcons from 'lucide-react'; // Fallback import to prevent strict-mode crashes
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
-// --- SAFE ICON FALLBACKS ---
-// This prevents the entire app from crashing if 'lucide-react' renames icons in newer versions
-const EditIcon = LucideIcons.Pencil || LucideIcons.Edit2 || LucideIcons.Edit || LucideIcons.Pen || (() => <span style={{fontSize: '1em'}}>✏️</span>);
-const TrashIcon = LucideIcons.Trash || LucideIcons.Trash2 || (() => <span style={{fontSize: '1em'}}>🗑️</span>);
-const AlertIcon = LucideIcons.TriangleAlert || LucideIcons.AlertTriangle || LucideIcons.AlertCircle || (() => <span style={{fontSize: '1em'}}>⚠️</span>);
+// --- SECURITY UTILITY: PASSWORD HASHING ---
+const hashPassword = async (password) => {
+  const msgBuffer = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
 
 // --- FIREBASE INITIALIZATION ---
-const isPreviewEnv = typeof __firebase_config !== 'undefined' && __firebase_config;
-const firebaseConfig = isPreviewEnv ? JSON.parse(__firebase_config) : {
+let parsedConfig = {
   apiKey: "AIzaSyAW3I1jRHHzkLHRVQ_BU6wsZfnpphqPNOs",
   authDomain: "exambuilder-2e28c.firebaseapp.com",
   projectId: "exambuilder-2e28c",
@@ -28,10 +27,22 @@ const firebaseConfig = isPreviewEnv ? JSON.parse(__firebase_config) : {
   appId: "1:433848274913:web:af0a7deb1bc6525ea88ca0"
 };
 
+if (typeof __firebase_config !== 'undefined') {
+  try {
+    parsedConfig = typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config;
+  } catch (e) {
+    console.error("Config parse error");
+  }
+}
+
+const firebaseConfig = parsedConfig;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : "examBuilder-production";
+
+// Safely sanitize the app ID so it never generates invalid, nested database collection paths
+const rawAppId = typeof __app_id !== 'undefined' ? String(__app_id) : "examBuilder-production";
+const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '-') || 'default-app-id';
 
 // --- FALLBACK MOCK DATA FOR SEEDING ---
 const DEFAULT_EXAM = {
@@ -295,6 +306,8 @@ export default function App() {
 
   // SuperAdmin state
   const [newTeacherForm, setNewTeacherForm] = useState({ name: '', email: '', password: '' });
+  const [hashInput, setHashInput] = useState('');
+  const [generatedHash, setGeneratedHash] = useState('');
 
   // Password Change state (Unified for Students and Teachers)
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
@@ -321,11 +334,41 @@ export default function App() {
   const [currentScore, setCurrentScore] = useState({ score: 0, percentage: 0 });
 
   // Dashboard Views
-  const [adminView, setAdminView] = useState('list_exams'); // 'list_exams', 'edit_exam_details', 'manage_questions', 'edit_question', 'analytics', 'student_review', 'change_password'
-  const [homeView, setHomeView] = useState('dashboard'); // 'dashboard', 'change_password'
+  const [adminView, setAdminView] = useState('list_exams'); 
+  const [homeView, setHomeView] = useState('dashboard'); 
   const [editingExamDetails, setEditingExamDetails] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [selectedStudentResult, setSelectedStudentResult] = useState(null); 
+
+  // --- SAFETY TIMEOUT: PREVENT BLANK SCREEN ON LOCALHOST ---
+  useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      if (appState === 'loading') {
+        console.warn("Auth initialization timed out. Defaulting to login screen.");
+        setAppState('login');
+      }
+    }, 2500); // 2.5 seconds timeout
+    
+    return () => clearTimeout(fallbackTimer);
+  }, [appState]);
+
+  // --- DEV UTILITY: GENERATE HASHES IN CONSOLE ---
+  useEffect(() => {
+    const generateRequestedHashes = async () => {
+      const passwordsToHash = [
+        "Hisham2020", "test123", "Sabya1198", "tahmaq-3sorpe-qewquW", 
+        "Mzmooz1950", "sami1431", "wornog-xetwu3-kusmuN", "Aziz2008", 
+        "11223344556677", "Student", "abdullah462008", "12345", 
+        "maya123", "bonXov-giftah-7vujxi", "Rawad2008"
+      ];
+      console.log("----- GENERATED PASSWORD HASHES -----");
+      for (const p of passwordsToHash) {
+        const h = await hashPassword(p);
+        console.log(`Password: ${p} \nHash: ${h}\n`);
+      }
+    };
+    generateRequestedHashes();
+  }, []);
 
   // 1. Fetch Public Collections
   useEffect(() => {
@@ -431,12 +474,12 @@ export default function App() {
     setIsSubmittingAuth(true);
 
     const userEmail = String(authForm.email || '').toLowerCase().trim();
-    const userPassword = authForm.password;
+    const userPasswordHash = await hashPassword(authForm.password);
 
     try {
       if (loginMode === 'admin') {
         // System Admin Login
-        const adminUser = adminsList.find(a => String(a.email || '').toLowerCase() === userEmail && a.password === userPassword);
+        const adminUser = adminsList.find(a => String(a.email || '').toLowerCase() === userEmail && a.password === userPasswordHash);
         if (adminUser) {
           const session = { role: 'superadmin', name: 'System Admin', email: userEmail, userId: adminUser.id };
           localStorage.setItem('olyst_session', JSON.stringify(session));
@@ -445,10 +488,9 @@ export default function App() {
           setAuthError("Invalid admin credentials. Please check your system admin email and password.");
         }
       } else if (loginMode === 'teacher') {
-        // Teacher Login Only - Registration is strictly forbidden from the main page
-        const teacher = teachersList.find(t => String(t.email || '').toLowerCase() === userEmail && t.password === userPassword);
+        // Teacher Login Only
+        const teacher = teachersList.find(t => String(t.email || '').toLowerCase() === userEmail && t.password === userPasswordHash);
         if (teacher) {
-          // Storing the teacher's document ID in userId so they can change their password later
           const session = { role: 'teacher', name: teacher.name || 'Teacher', email: userEmail, studentId: 'teacher', userId: teacher.id };
           localStorage.setItem('olyst_session', JSON.stringify(session));
           setActiveSession(session);
@@ -464,15 +506,14 @@ export default function App() {
           } else {
             const newStudentId = `stu_${Date.now()}`;
             const newDocRef = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'studentProfiles'), {
-              email: userEmail, password: userPassword, name: authForm.name, studentId: newStudentId, createdAt: Date.now()
+              email: userEmail, password: userPasswordHash, name: authForm.name, studentId: newStudentId, createdAt: Date.now()
             });
-            // Including userId: newDocRef.id so students can change their passwords
             const session = { role: 'student', name: authForm.name, email: userEmail, studentId: newStudentId, userId: newDocRef.id };
             localStorage.setItem('olyst_session', JSON.stringify(session));
             setActiveSession(session);
           }
         } else {
-          const student = studentProfiles.find(s => String(s.email || '').toLowerCase() === userEmail && s.password === userPassword);
+          const student = studentProfiles.find(s => String(s.email || '').toLowerCase() === userEmail && s.password === userPasswordHash);
           if (student) {
             const session = { role: 'student', name: student.name, email: userEmail, studentId: student.studentId, userId: student.id };
             localStorage.setItem('olyst_session', JSON.stringify(session));
@@ -516,10 +557,11 @@ export default function App() {
     }
 
     try {
+      const hashedPassword = await hashPassword(newTeacherForm.password);
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'teachers'), {
         name: newTeacherForm.name,
         email: emailToRegister,
-        password: newTeacherForm.password,
+        password: hashedPassword,
         createdAt: Date.now()
       });
       setAuthSuccess(`Successfully created account for ${newTeacherForm.name}!`);
@@ -559,9 +601,10 @@ export default function App() {
     }
 
     try {
+      const hashedPassword = await hashPassword(passwordForm.newPassword);
       const collectionName = activeSession.role === 'teacher' ? 'teachers' : 'studentProfiles';
       const docRef = doc(db, 'artifacts', appId, 'public', 'data', collectionName, activeSession.userId);
-      await updateDoc(docRef, { password: passwordForm.newPassword });
+      await updateDoc(docRef, { password: hashedPassword });
       setAuthSuccess("Your password has been successfully updated!");
       setPasswordForm({ newPassword: '', confirmPassword: '' });
       setTimeout(() => {
@@ -588,7 +631,6 @@ export default function App() {
 
     let preppedQuestions = rawQuestions;
     if (mode === 'timed') {
-      // Anti-Cheat: Shuffle questions and options safely
       preppedQuestions = shuffleArray(rawQuestions.map(q => ({
         ...q,
         options: shuffleArray([...(q.options || [])])
@@ -618,7 +660,6 @@ export default function App() {
     const percentage = Math.round((score / sessionQuestions.length) * 100);
     setCurrentScore({ score, percentage });
 
-    // Only save results for actual Timed Exams, not Study Mode
     if (activeSession && activeSession.role === 'student' && examMode === 'timed') {
       try {
         const resultData = {
@@ -628,13 +669,10 @@ export default function App() {
           total: sessionQuestions.length,
           percentage,
           timestamp: Date.now(),
-          answers // Saving answers mapping to database so teachers can review it
+          answers 
         };
 
-        // 1. Save to personal history
         await addDoc(collection(db, 'artifacts', appId, 'users', activeSession.studentId, 'results'), resultData);
-        
-        // 2. Save globally for Teacher Analytics
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'allResults'), {
           ...resultData,
           studentName: activeSession.name,
@@ -775,7 +813,11 @@ export default function App() {
     if (appState === 'loading') {
       return (
         <div className="min-h-screen flex items-center justify-center">
-          <p className="text-muted font-bold">Loading Platform...</p>
+          <div className="text-center">
+            <Calculator size={48} color="#2563eb" style={{ margin: '0 auto 1rem', animation: 'pulse 2s infinite' }} />
+            <h2 className="title">Loading Platform...</h2>
+            <p className="text-muted">Connecting to secure database</p>
+          </div>
         </div>
       );
     }
@@ -899,8 +941,29 @@ export default function App() {
                  </form>
                </div>
 
+               {/* Hash Generator */}
+               <div className="card">
+                 <h2 className="title mb-6 flex items-center gap-3"><Key size={24} color="#2563eb" /> Password Hash Generator</h2>
+                 <p className="text-muted mb-4">Generate exact SHA-256 hashes for manual database entry.</p>
+                 <div className="input-group mb-4">
+                   <div className="input-wrapper">
+                     <Lock size={18} className="input-icon" />
+                     <input type="text" value={hashInput} onChange={async (e) => {
+                       setHashInput(e.target.value);
+                       if(e.target.value) setGeneratedHash(await hashPassword(e.target.value));
+                       else setGeneratedHash('');
+                     }} className="input" placeholder="Type password here..." />
+                   </div>
+                 </div>
+                 {generatedHash && (
+                   <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '0.5rem', wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.875rem', border: '1px solid #cbd5e1' }}>
+                     {generatedHash}
+                   </div>
+                 )}
+               </div>
+
                {/* List of Teachers */}
-               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+               <div className="card col-span-2" style={{ padding: 0, overflow: 'hidden' }}>
                  <div className="card-header" style={{ margin: 0, borderRadius: 0, padding: '1.5rem', textAlign: 'left', background: '#f8fafc', color: '#0f172a', borderBottom: '1px solid #e2e8f0' }}>
                    <h2 className="subtitle" style={{ margin: 0 }}>Registered Teachers</h2>
                  </div>
@@ -1522,7 +1585,7 @@ export default function App() {
             <div className="modal-overlay">
               <div className="modal-content">
                 <div className="flex items-center justify-center gap-4 mb-4 text-warning">
-                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertIcon size={32} /></div>
+                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><TriangleAlert size={32} /></div>
                 </div>
                 <h3 className="title">Unanswered Questions</h3>
                 <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{sessionQuestions.length - Object.keys(answers || {}).length}</strong> unanswered questions. Are you sure you want to finish?</p>
