@@ -40,9 +40,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Safely sanitize the app ID so it never generates invalid, nested database collection paths
-const rawAppId = typeof __app_id !== 'undefined' ? String(__app_id) : "examBuilder-production";
-const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '-') || 'default-app-id';
+// Use the simplest possible base pathing that maps directly to your custom Firestore structure.
+// This prevents the path segments mismatch error.
+const appId = "examBuilder-production";
 
 // --- FALLBACK MOCK DATA FOR SEEDING ---
 const DEFAULT_EXAM = {
@@ -372,35 +372,38 @@ export default function App() {
 
   // 1. Fetch Public Collections
   useEffect(() => {
+    // We construct the paths manually to guarantee valid segment counts
+    const publicDataPath = `artifacts/${appId}/public/data`;
+
     // Fetch Admins
-    const unsubAdmins = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'admins'), (snapshot) => {
+    const unsubAdmins = onSnapshot(collection(db, `${publicDataPath}/admins`), (snapshot) => {
       setAdminsList(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => console.error("Error fetching admins:", error));
 
     // Fetch Teachers
-    const unsubTeachers = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'teachers'), (snapshot) => {
+    const unsubTeachers = onSnapshot(collection(db, `${publicDataPath}/teachers`), (snapshot) => {
       setTeachersList(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => console.error("Error fetching teachers:", error));
 
     // Fetch Students
-    const unsubStudents = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'studentProfiles'), (snapshot) => {
+    const unsubStudents = onSnapshot(collection(db, `${publicDataPath}/studentProfiles`), (snapshot) => {
       setStudentProfiles(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => console.error("Error fetching students:", error));
 
     // Fetch Exams
-    const unsubExams = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'exams'), (snapshot) => {
+    const unsubExams = onSnapshot(collection(db, `${publicDataPath}/exams`), (snapshot) => {
       const loadedExams = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       loadedExams.sort((a, b) => b.createdAt - a.createdAt); 
       setExams(loadedExams);
     }, (error) => console.error("Error fetching exams:", error));
 
     // Fetch Questions
-    const unsubQuestions = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'questions'), (snapshot) => {
+    const unsubQuestions = onSnapshot(collection(db, `${publicDataPath}/questions`), (snapshot) => {
       setAllQuestions(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => console.error("Error fetching questions:", error));
 
     // Fetch Global Results (for Analytics)
-    const unsubAllResults = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'allResults'), (snapshot) => {
+    const unsubAllResults = onSnapshot(collection(db, `${publicDataPath}/allResults`), (snapshot) => {
       setAllResults(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => console.error("Error fetching global results:", error));
 
@@ -427,7 +430,7 @@ export default function App() {
   // 3. Fetch private results for logged in Student
   useEffect(() => {
     if (activeSession && activeSession.role === 'student') {
-      const q = collection(db, 'artifacts', appId, 'users', activeSession.studentId, 'results');
+      const q = collection(db, `artifacts/${appId}/users/${activeSession.studentId}/results`);
       const unsubResults = onSnapshot(q, (snapshot) => {
         const results = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         results.sort((a, b) => b.timestamp - a.timestamp);
@@ -505,7 +508,7 @@ export default function App() {
             setAuthError("This email is already registered. Please click 'Sign in' instead.");
           } else {
             const newStudentId = `stu_${Date.now()}`;
-            const newDocRef = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'studentProfiles'), {
+            const newDocRef = await addDoc(collection(db, `artifacts/${appId}/public/data/studentProfiles`), {
               email: userEmail, password: userPasswordHash, name: authForm.name, studentId: newStudentId, createdAt: Date.now()
             });
             const session = { role: 'student', name: authForm.name, email: userEmail, studentId: newStudentId, userId: newDocRef.id };
@@ -558,7 +561,7 @@ export default function App() {
 
     try {
       const hashedPassword = await hashPassword(newTeacherForm.password);
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'teachers'), {
+      await addDoc(collection(db, `artifacts/${appId}/public/data/teachers`), {
         name: newTeacherForm.name,
         email: emailToRegister,
         password: hashedPassword,
@@ -575,7 +578,7 @@ export default function App() {
   const handleDeleteTeacher = async (teacherId) => {
     if (!window.confirm("Are you sure you want to delete this teacher account? This action cannot be undone.")) return;
     try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'teachers', teacherId));
+      await deleteDoc(doc(db, `artifacts/${appId}/public/data/teachers/${teacherId}`));
       setAuthSuccess("Teacher account permanently deleted.");
       setTimeout(() => setAuthSuccess(''), 3000);
     } catch (err) {
@@ -603,7 +606,7 @@ export default function App() {
     try {
       const hashedPassword = await hashPassword(passwordForm.newPassword);
       const collectionName = activeSession.role === 'teacher' ? 'teachers' : 'studentProfiles';
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', collectionName, activeSession.userId);
+      const docRef = doc(db, `artifacts/${appId}/public/data/${collectionName}/${activeSession.userId}`);
       await updateDoc(docRef, { password: hashedPassword });
       setAuthSuccess("Your password has been successfully updated!");
       setPasswordForm({ newPassword: '', confirmPassword: '' });
@@ -672,8 +675,8 @@ export default function App() {
           answers 
         };
 
-        await addDoc(collection(db, 'artifacts', appId, 'users', activeSession.studentId, 'results'), resultData);
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'allResults'), {
+        await addDoc(collection(db, `artifacts/${appId}/users/${activeSession.studentId}/results`), resultData);
+        await addDoc(collection(db, `artifacts/${appId}/public/data/allResults`), {
           ...resultData,
           studentName: activeSession.name,
           studentId: activeSession.studentId
@@ -701,10 +704,10 @@ export default function App() {
 
   const seedDemoExam = async () => {
     try {
-      const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams');
+      const examsRef = collection(db, `artifacts/${appId}/public/data/exams`);
       const examDocRef = await addDoc(examsRef, { ...DEFAULT_EXAM, createdAt: Date.now() });
 
-      const questionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions');
+      const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
       for (let i = 0; i < DEFAULT_QUESTIONS.length; i++) {
         await addDoc(questionsRef, { 
           ...DEFAULT_QUESTIONS[i], 
@@ -724,7 +727,7 @@ export default function App() {
 
   const saveExamDetails = async (e) => {
     e.preventDefault();
-    const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams');
+    const examsRef = collection(db, `artifacts/${appId}/public/data/exams`);
     const examData = {
       title: editingExamDetails.title,
       description: editingExamDetails.description,
@@ -738,7 +741,7 @@ export default function App() {
         examData.createdAt = Date.now();
         await addDoc(examsRef, examData);
       } else {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'exams', editingExamDetails.id);
+        const docRef = doc(db, `artifacts/${appId}/public/data/exams/${editingExamDetails.id}`);
         await updateDoc(docRef, examData);
       }
       setAdminView('list_exams');
@@ -751,10 +754,10 @@ export default function App() {
   const deleteExam = async (examId) => {
     if (!window.confirm("Are you sure? This will delete the exam.")) return;
     try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'exams', examId));
+      await deleteDoc(doc(db, `artifacts/${appId}/public/data/exams/${examId}`));
       const qsToDelete = allQuestions.filter(q => q.examId === examId);
       qsToDelete.forEach(async (q) => {
-         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'questions', q.id));
+         await deleteDoc(doc(db, `artifacts/${appId}/public/data/questions/${q.id}`));
       });
     } catch (err) {
       console.error("Error deleting exam:", err);
@@ -773,7 +776,7 @@ export default function App() {
   const saveQuestion = async (e) => {
     e.preventDefault();
     if (!selectedExam) return;
-    const questionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions');
+    const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
     const qData = {
       examId: selectedExam.id, 
       topic: editingQuestion.topic || '', 
@@ -788,7 +791,7 @@ export default function App() {
       if (editingQuestion.isNew) {
         await addDoc(questionsRef, qData);
       } else {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'questions', editingQuestion.id);
+        const docRef = doc(db, `artifacts/${appId}/public/data/questions/${editingQuestion.id}`);
         await updateDoc(docRef, qData);
       }
       setEditingQuestion(null);
@@ -801,7 +804,7 @@ export default function App() {
   const deleteQuestion = async (id) => {
     if (!window.confirm('Are you sure you want to delete this question?')) return;
     try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'questions', id));
+      await deleteDoc(doc(db, `artifacts/${appId}/public/data/questions/${id}`));
     } catch (err) {
       console.error("Error deleting question:", err);
     }
