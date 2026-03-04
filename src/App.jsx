@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Clock, ChevronLeft, ChevronRight, Check, X, TriangleAlert, Calculator, 
+  Clock, ChevronLeft, ChevronRight, Check, X, Calculator, 
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
-  Award, Settings, Plus, Trash, Pencil, Save, BookOpen, FileText,
-  BarChart, Lightbulb, Shuffle, Eye, Shield, Key
+  Award, Settings, Plus, Save, BookOpen, FileText,
+  BarChart, Lightbulb, Shuffle, Eye, Shield, Key,
+  Pencil, Trash, AlertCircle, Download, Upload
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -12,7 +13,7 @@ import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, d
 // --- ICON ALIASES (Prevents Rendering Crashes) ---
 const EditIcon = Pencil;
 const TrashIcon = Trash;
-const AlertIcon = TriangleAlert;
+const AlertIcon = AlertCircle;
 
 // --- SECURITY UTILITY: PASSWORD HASHING ---
 const hashPassword = async (password) => {
@@ -344,6 +345,7 @@ export default function App() {
   const [editingExamDetails, setEditingExamDetails] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [selectedStudentResult, setSelectedStudentResult] = useState(null); 
+  const [isUploadingCSV, setIsUploadingCSV] = useState(false);
 
   // --- SAFETY TIMEOUT: PREVENT BLANK SCREEN ON LOCALHOST ---
   useEffect(() => {
@@ -815,6 +817,88 @@ export default function App() {
     }
   };
 
+  // --- CSV UPLOAD/DOWNLOAD HANDLERS ---
+  const handleDownloadTemplate = () => {
+    const csvContent = `Topic,Question Text,Option A,Option B,Option C,Option D,Correct Answer (A/B/C/D),Explanation\nAlgebra I,Solve for x: 2x + 4 = 10,2,3,4,5,B,Subtract 4 from both sides to get 2x = 6. Divide by 2 to get x = 3.\nGeometry,What is the area of a rectangle with length 5 and width 4?,9,18,20,40,C,The area of a rectangle is length multiplied by width (5 * 4 = 20).\nFractions,"What is 1/2 + 1/4?","1/4","3/4","2/6","1",B,"To add fractions, find a common denominator. 1/2 becomes 2/4. 2/4 + 1/4 = 3/4."`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "questions_template.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCSVUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedExam || !activeSession) return;
+
+    setIsUploadingCSV(true);
+    setAuthError('');
+    setAuthSuccess('');
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target.result;
+        // Split by newlines
+        const rows = text.split(/\r?\n/).filter(row => row.trim().length > 0);
+        
+        if (rows.length <= 1) {
+          throw new Error("CSV appears to be empty or missing data rows.");
+        }
+
+        const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
+        let addedCount = 0;
+
+        // Loop through rows (skip the first row assuming it is headers)
+        for (let i = 1; i < rows.length; i++) {
+          // Regex to split by comma, but ignore commas inside double-quotes
+          const values = rows[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => {
+            let clean = s.trim();
+            if (clean.startsWith('"') && clean.endsWith('"')) {
+              clean = clean.slice(1, -1).replace(/""/g, '"'); // Remove surrounding quotes
+            }
+            return clean;
+          });
+
+          // Ensure row has at least 8 columns (Topic, Text, A, B, C, D, Correct, Explanation)
+          if (values.length >= 8) {
+            const qData = {
+              examId: selectedExam.id,
+              topic: values[0] || 'General',
+              text: values[1] || '',
+              options: [
+                { id: 'A', text: values[2] || '' },
+                { id: 'B', text: values[3] || '' },
+                { id: 'C', text: values[4] || '' },
+                { id: 'D', text: values[5] || '' }
+              ],
+              correctId: (values[6] || 'A').toUpperCase().trim(),
+              explanation: values[7] || '',
+              order: Date.now() + addedCount // Ensure sequential ordering
+            };
+            await addDoc(questionsRef, qData);
+            addedCount++;
+          }
+        }
+
+        setAuthSuccess(`Successfully imported ${addedCount} questions!`);
+        setTimeout(() => setAuthSuccess(''), 4000);
+      } catch (err) {
+        console.error("CSV Upload Error:", err);
+        setAuthError("Failed to parse CSV. Please ensure you are using the correct template.");
+        setTimeout(() => setAuthError(''), 4000);
+      } finally {
+        setIsUploadingCSV(false);
+        e.target.value = ''; // Reset input so the same file can be selected again if needed
+      }
+    };
+    reader.readAsText(file);
+  };
+
   // --- VIEWS ---
 
   const renderContent = () => {
@@ -833,7 +917,7 @@ export default function App() {
     if (appState === 'login') {
       return (
         <div className="min-h-screen flex items-center justify-center" style={{ padding: '1.5rem' }}>
-          <div className="card container-sm" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="card container-sm" style={{ padding: 0, overflow: 'hidden', width: '100%' }}>
             <div className="card-header">
               <div className={`card-header-icon ${loginMode === 'admin' ? 'admin' : ''}`}>
                 {loginMode === 'admin' ? <Shield size={32} /> : <Calculator size={32} />}
@@ -1263,14 +1347,35 @@ export default function App() {
 
             {adminView === 'manage_questions' && selectedExam && (
               <>
-                <button onClick={() => { setSelectedExam(null); setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Exams</button>
+                <button onClick={() => { setSelectedExam(null); setAdminView('list_exams'); setAuthError(''); setAuthSuccess(''); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Exams</button>
                 <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
                   <div>
                     <h1 className="title">{selectedExam.title} - Questions</h1>
                     <p className="text-muted">Manage the questions for this specific assessment.</p>
                   </div>
-                  <button onClick={openNewQuestion} className="btn btn-primary w-full-sm"><Plus size={18} /> Add Question</button>
+                  <div className="flex gap-2 w-full-sm" style={{ flexWrap: 'wrap' }}>
+                    <button onClick={handleDownloadTemplate} className="btn btn-outline flex-1" title="Download CSV Template" style={{ margin: 0, justifyContent: 'center', whiteSpace: 'nowrap' }}>
+                      <Download size={18} /> <span className="hidden-sm">Template</span>
+                    </button>
+                    <input 
+                      type="file" 
+                      accept=".csv" 
+                      id="csv-upload" 
+                      style={{ display: 'none' }} 
+                      onChange={handleCSVUpload} 
+                    />
+                    <label htmlFor="csv-upload" className={`btn btn-outline flex-1 ${isUploadingCSV ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`} style={{ margin: 0, justifyContent: 'center', whiteSpace: 'nowrap' }}>
+                      <Upload size={18} /> <span className="hidden-sm">{isUploadingCSV ? 'Uploading...' : 'Import CSV'}</span>
+                    </label>
+                    <button onClick={openNewQuestion} className="btn btn-primary flex-1" style={{ whiteSpace: 'nowrap' }}>
+                      <Plus size={18} /> <span className="hidden-sm">Add Question</span>
+                    </button>
+                  </div>
                 </div>
+                
+                {authError && <div className="error-message mb-4">{authError}</div>}
+                {authSuccess && <div className="success-message mb-4">{authSuccess}</div>}
+
                 {getExamQuestionsFromDB().length === 0 ? (
                   <div className="empty-state">
                     <LayoutGrid size={48} className="text-muted" style={{ margin: '0 auto 1rem auto', opacity: 0.5 }} />
