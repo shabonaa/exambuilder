@@ -352,6 +352,7 @@ export default function App() {
   // Feature: Image Uploads for Questions
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [imageFile, setImageFile] = useState(null);
+  const [explanationImageFile, setExplanationImageFile] = useState(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const [selectedStudentResult, setSelectedStudentResult] = useState(null); 
@@ -767,9 +768,10 @@ export default function App() {
     setEditingQuestion({
       isNew: true, topic: '', text: '',
       options: [ { id: 'A', text: '' }, { id: 'B', text: '' }, { id: 'C', text: '' }, { id: 'D', text: '' } ],
-      correctId: 'A', explanation: '', imageUrl: ''
+      correctId: 'A', explanation: '', imageUrl: '', explanationImageUrl: ''
     });
     setImageFile(null);
+    setExplanationImageFile(null);
     setAdminView('edit_question');
   };
 
@@ -780,14 +782,15 @@ export default function App() {
     setIsUploadingImage(true);
     setAuthError('');
     let uploadedImageUrl = editingQuestion.imageUrl || '';
+    let uploadedExplanationImageUrl = editingQuestion.explanationImageUrl || '';
 
     try {
-      // CLOUDINARY UPLOAD LOGIC
-      if (imageFile) {
-        if (CLOUDINARY_CLOUD_NAME === "YOUR_CLOUD_NAME") {
-          throw new Error("Please configure your Cloudinary Cloud Name and Upload Preset in the code.");
-        }
+      if (CLOUDINARY_CLOUD_NAME === "YOUR_CLOUD_NAME" && (imageFile || explanationImageFile)) {
+        throw new Error("Please configure your Cloudinary Cloud Name and Upload Preset in the code.");
+      }
 
+      // CLOUDINARY UPLOAD LOGIC - MAIN QUESTION IMAGE
+      if (imageFile) {
         const formData = new FormData();
         formData.append('file', imageFile);
         formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
@@ -798,11 +801,30 @@ export default function App() {
         });
         
         if (!uploadRes.ok) {
-          throw new Error("Failed to upload image to Cloudinary. Check if your upload preset is Unsigned.");
+          throw new Error("Failed to upload question image to Cloudinary.");
         }
         
         const uploadData = await uploadRes.json();
         uploadedImageUrl = uploadData.secure_url;
+      }
+
+      // CLOUDINARY UPLOAD LOGIC - EXPLANATION IMAGE
+      if (explanationImageFile) {
+        const explanationFormData = new FormData();
+        explanationFormData.append('file', explanationImageFile);
+        explanationFormData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+        const explanationUploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+          method: 'POST',
+          body: explanationFormData
+        });
+        
+        if (!explanationUploadRes.ok) {
+          throw new Error("Failed to upload explanation image to Cloudinary.");
+        }
+        
+        const explanationUploadData = await explanationUploadRes.json();
+        uploadedExplanationImageUrl = explanationUploadData.secure_url;
       }
 
       const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
@@ -814,6 +836,7 @@ export default function App() {
         correctId: editingQuestion.correctId || 'A',
         explanation: editingQuestion.explanation || '', 
         imageUrl: uploadedImageUrl,
+        explanationImageUrl: uploadedExplanationImageUrl,
         order: editingQuestion.order || Date.now()
       };
 
@@ -826,6 +849,7 @@ export default function App() {
       
       setEditingQuestion(null);
       setImageFile(null);
+      setExplanationImageFile(null);
       setAdminView('manage_questions');
     } catch (err) {
       console.error("Error saving question:", err);
@@ -903,6 +927,7 @@ export default function App() {
               correctId: (values[6] || 'A').toUpperCase().trim(),
               explanation: values[7] || '',
               imageUrl: '', 
+              explanationImageUrl: '',
               order: Date.now() + addedCount
             };
             await addDoc(questionsRef, qData);
@@ -1058,29 +1083,8 @@ export default function App() {
                  </form>
                </div>
 
-               {/* Hash Generator */}
-               <div className="card">
-                 <h2 className="title mb-6 flex items-center gap-3"><Key size={24} color="#2563eb" /> Password Hash Generator</h2>
-                 <p className="text-muted mb-4">Generate exact SHA-256 hashes for manual database entry.</p>
-                 <div className="input-group mb-4">
-                   <div className="input-wrapper">
-                     <Lock size={18} className="input-icon" />
-                     <input type="text" value={hashInput} onChange={async (e) => {
-                       setHashInput(e.target.value);
-                       if(e.target.value) setGeneratedHash(await hashPassword(e.target.value));
-                       else setGeneratedHash('');
-                     }} className="input" placeholder="Type password here..." />
-                   </div>
-                 </div>
-                 {generatedHash && (
-                   <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '0.5rem', wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.875rem', border: '1px solid #cbd5e1' }}>
-                     {generatedHash}
-                   </div>
-                 )}
-               </div>
-
                {/* List of Teachers */}
-               <div className="card col-span-2" style={{ padding: 0, overflow: 'hidden' }}>
+               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                  <div className="card-header" style={{ margin: 0, borderRadius: 0, padding: '1.5rem', textAlign: 'left', background: '#f8fafc', color: '#0f172a', borderBottom: '1px solid #e2e8f0' }}>
                    <h2 className="subtitle" style={{ margin: 0 }}>Registered Teachers</h2>
                  </div>
@@ -1330,6 +1334,13 @@ export default function App() {
                               );
                             })}
                           </div>
+                          <div className="review-explanation">
+                            <strong style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>Explanation</strong>
+                            {q?.explanation || 'No explanation provided.'}
+                            {q?.explanationImageUrl && (
+                              <img src={q.explanationImageUrl} alt="Explanation Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginTop: '1rem', objectFit: 'contain', border: '1px solid #bfdbfe' }} />
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -1425,7 +1436,8 @@ export default function App() {
                             <div className="flex-1">
                               <div className="text-muted font-bold mb-2" style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>{q?.topic || 'No Topic'}</div>
                               <p style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '1rem' }}>{q?.text || 'No text provided'}</p>
-                              {q?.imageUrl && <div className="mb-4 text-sm font-bold text-primary flex items-center gap-2"><ImageIcon size={16} /> Attached Image</div>}
+                              {q?.imageUrl && <div className="mb-2 text-sm font-bold text-primary flex items-center gap-2"><ImageIcon size={16} /> Attached Question Image</div>}
+                              {q?.explanationImageUrl && <div className="mb-4 text-sm font-bold text-primary flex items-center gap-2"><ImageIcon size={16} /> Attached Explanation Image</div>}
                               <div className="grid grid-cols-2 gap-2" style={{ fontSize: '0.875rem' }}>
                                 {optionsArray.map((opt, oIdx) => (
                                   <div key={opt?.id || oIdx} style={{ padding: '0.5rem', border: '1px solid', borderColor: q?.correctId === opt?.id ? '#bbf7d0' : '#e2e8f0', backgroundColor: q?.correctId === opt?.id ? '#f0fdf4' : 'white', borderRadius: '0.5rem', color: q?.correctId === opt?.id ? '#166534' : '#475569' }}>
@@ -1436,7 +1448,7 @@ export default function App() {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <button onClick={() => { setEditingQuestion(q); setImageFile(null); setAdminView('edit_question'); }} className="btn-icon"><EditIcon size={20} /></button>
+                            <button onClick={() => { setEditingQuestion(q); setImageFile(null); setExplanationImageFile(null); setAdminView('edit_question'); }} className="btn-icon"><EditIcon size={20} /></button>
                             <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><TrashIcon size={20} /></button>
                           </div>
                         </div>
@@ -1463,13 +1475,16 @@ export default function App() {
                       <input required type="text" value={editingQuestion.topic || ''} onChange={e => setEditingQuestion({...editingQuestion, topic: e.target.value})} className="input no-icon" placeholder="e.g. Algebra" />
                     </div>
                     
-                    {/* NEW: IMAGE UPLOAD FEATURE WITH CLOUDINARY */}
+                    {/* NEW: MAIN IMAGE UPLOAD */}
                     <div className="input-group col-span-2 p-4" style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '0.75rem' }}>
                       <label className="label mb-2 flex items-center gap-2"><ImageIcon size={16}/> Question Image (Optional)</label>
                       <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])} className="input no-icon" style={{ background: 'white', padding: '0.5rem' }} />
                       {editingQuestion.imageUrl && !imageFile && (
-                        <div className="mt-3 text-sm flex items-center gap-2" style={{ color: '#2563eb' }}>
-                           <Check size={14} /> Currently has an image attached. Uploading a new one will replace it.
+                        <div className="mt-3">
+                           <p className="text-sm flex items-center gap-2" style={{ color: '#2563eb' }}>
+                             <Check size={14} /> Currently has an image attached. Uploading a new one will replace it.
+                           </p>
+                           <button type="button" onClick={() => { setEditingQuestion({...editingQuestion, imageUrl: ''}); setImageFile(null); }} className="btn btn-danger mt-2" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}><Trash size={14}/> Remove Existing Image</button>
                         </div>
                       )}
                     </div>
@@ -1492,16 +1507,30 @@ export default function App() {
                         <option value="A">Option A</option><option value="B">Option B</option><option value="C">Option C</option><option value="D">Option D</option>
                       </select>
                     </div>
+
+                    {/* NEW: EXPLANATION IMAGE UPLOAD */}
+                    <div className="input-group col-span-2 p-4" style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '0.75rem' }}>
+                      <label className="label mb-2 flex items-center gap-2"><ImageIcon size={16}/> Explanation Image (Optional)</label>
+                      <input type="file" accept="image/*" onChange={(e) => setExplanationImageFile(e.target.files[0])} className="input no-icon" style={{ background: 'white', padding: '0.5rem' }} />
+                      {editingQuestion.explanationImageUrl && !explanationImageFile && (
+                        <div className="mt-3">
+                           <p className="text-sm flex items-center gap-2" style={{ color: '#2563eb' }}>
+                             <Check size={14} /> Currently has an image attached. Uploading a new one will replace it.
+                           </p>
+                           <button type="button" onClick={() => { setEditingQuestion({...editingQuestion, explanationImageUrl: ''}); setExplanationImageFile(null); }} className="btn btn-danger mt-2" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}><Trash size={14}/> Remove Existing Image</button>
+                        </div>
+                      )}
+                    </div>
                     
                     <div className="input-group col-span-2 mb-0">
-                      <label className="label">Explanation (Shown after exam)</label>
+                      <label className="label">Explanation Text (Shown after exam)</label>
                       <textarea required rows={2} value={editingQuestion.explanation || ''} onChange={e => setEditingQuestion({...editingQuestion, explanation: e.target.value})} className="input no-icon" placeholder="Explain why the answer is correct..." />
                     </div>
                   </div>
                   <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
-                    <button type="button" onClick={() => { setEditingQuestion(null); setImageFile(null); setAdminView('manage_questions'); }} className="btn btn-outline" disabled={isUploadingImage}>Cancel</button>
+                    <button type="button" onClick={() => { setEditingQuestion(null); setImageFile(null); setExplanationImageFile(null); setAdminView('manage_questions'); }} className="btn btn-outline" disabled={isUploadingImage}>Cancel</button>
                     <button type="submit" className="btn btn-primary" disabled={isUploadingImage}>
-                      <Save size={18} /> {isUploadingImage ? 'Uploading Image...' : 'Save Question'}
+                      <Save size={18} /> {isUploadingImage ? 'Uploading Images...' : 'Save Question'}
                     </button>
                   </div>
                 </form>
@@ -1727,6 +1756,9 @@ export default function App() {
               <div className="card mb-8" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
                 <h3 className="subtitle flex items-center gap-2 mb-2" style={{ color: '#b45309' }}><Lightbulb size={20} /> Explanation</h3>
                 <p style={{ color: '#92400e' }}>{currentQuestion?.explanation || 'No explanation provided.'}</p>
+                {currentQuestion?.explanationImageUrl && (
+                  <img src={currentQuestion.explanationImageUrl} alt="Explanation Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginTop: '1rem', objectFit: 'contain', border: '1px solid #fcd34d' }} />
+                )}
               </div>
             )}
             
@@ -1858,6 +1890,9 @@ export default function App() {
                       <div className="review-explanation">
                         <strong style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>Explanation</strong>
                         {q?.explanation || 'No explanation provided.'}
+                        {q?.explanationImageUrl && (
+                          <img src={q.explanationImageUrl} alt="Explanation Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginTop: '1rem', objectFit: 'contain', border: '1px solid #bfdbfe' }} />
+                        )}
                       </div>
                     </div>
                   </div>
