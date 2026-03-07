@@ -1,19 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Clock, ChevronLeft, ChevronRight, Check, X, Calculator, 
+  Clock, ChevronLeft, ChevronRight, Check, X, TriangleAlert, Calculator, 
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
-  Award, Settings, Plus, Save, BookOpen, FileText,
+  Award, Settings, Plus, Trash, Pencil, Save, BookOpen, FileText,
   BarChart, Lightbulb, Shuffle, Eye, Shield, Key,
-  Pencil, Trash, AlertCircle, Download, Upload
+  Download, Upload, Image as ImageIcon
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
+// --- CLOUDINARY CONFIGURATION ---
+// Replace these two values with your actual Cloudinary details
+const CLOUDINARY_CLOUD_NAME = "dm8nurvba"; // e.g., "dxyz123"
+const CLOUDINARY_UPLOAD_PRESET = "ExamBuilder"; // e.g., "exam_images"
+
 // --- ICON ALIASES (Prevents Rendering Crashes) ---
 const EditIcon = Pencil;
 const TrashIcon = Trash;
-const AlertIcon = AlertCircle;
+const AlertIcon = TriangleAlert;
 
 // --- SECURITY UTILITY: PASSWORD HASHING ---
 const hashPassword = async (password) => {
@@ -46,7 +51,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Safely sanitize the app ID so it never generates invalid, nested database collection paths
+// Safely sanitize the app ID so it never generates invalid database collection paths
 const rawAppId = typeof __app_id !== 'undefined' ? String(__app_id) : "examBuilder-production";
 const appId = rawAppId.replace(/[^a-zA-Z0-9_-]/g, '-') || 'default-app-id';
 
@@ -343,7 +348,12 @@ export default function App() {
   const [adminView, setAdminView] = useState('list_exams'); 
   const [homeView, setHomeView] = useState('dashboard'); 
   const [editingExamDetails, setEditingExamDetails] = useState(null);
+  
+  // Feature: Image Uploads for Questions
   const [editingQuestion, setEditingQuestion] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
   const [selectedStudentResult, setSelectedStudentResult] = useState(null); 
   const [isUploadingCSV, setIsUploadingCSV] = useState(false);
 
@@ -358,24 +368,6 @@ export default function App() {
     
     return () => clearTimeout(fallbackTimer);
   }, [appState]);
-
-  // --- DEV UTILITY: GENERATE HASHES IN CONSOLE ---
-  useEffect(() => {
-    const generateRequestedHashes = async () => {
-      const passwordsToHash = [
-        "Hisham2020", "test123", "Sabya1198", "tahmaq-3sorpe-qewquW", 
-        "Mzmooz1950", "sami1431", "wornog-xetwu3-kusmuN", "Aziz2008", 
-        "11223344556677", "Student", "abdullah462008", "12345", 
-        "maya123", "bonXov-giftah-7vujxi", "Rawad2008"
-      ];
-      console.log("----- GENERATED PASSWORD HASHES -----");
-      for (const p of passwordsToHash) {
-        const h = await hashPassword(p);
-        console.log(`Password: ${p} \nHash: ${h}\n`);
-      }
-    };
-    generateRequestedHashes();
-  }, []);
 
   // 1. Fetch Public Collections
   useEffect(() => {
@@ -489,7 +481,7 @@ export default function App() {
     try {
       if (loginMode === 'admin') {
         // System Admin Login
-        const adminUser = adminsList.find(a => String(a.email || '').toLowerCase() === userEmail && a.password === userPasswordHash);
+        const adminUser = adminsList.find(a => String(a.email || '').toLowerCase().trim() === userEmail && String(a.password || '').trim() === userPasswordHash);
         if (adminUser) {
           const session = { role: 'superadmin', name: 'System Admin', email: userEmail, userId: adminUser.id };
           localStorage.setItem('olyst_session', JSON.stringify(session));
@@ -499,7 +491,7 @@ export default function App() {
         }
       } else if (loginMode === 'teacher') {
         // Teacher Login Only
-        const teacher = teachersList.find(t => String(t.email || '').toLowerCase() === userEmail && t.password === userPasswordHash);
+        const teacher = teachersList.find(t => String(t.email || '').toLowerCase().trim() === userEmail && String(t.password || '').trim() === userPasswordHash);
         if (teacher) {
           const session = { role: 'teacher', name: teacher.name || 'Teacher', email: userEmail, studentId: 'teacher', userId: teacher.id };
           localStorage.setItem('olyst_session', JSON.stringify(session));
@@ -510,7 +502,7 @@ export default function App() {
       } else {
         // Student Flow
         if (isRegistering) {
-          const existingStudent = studentProfiles.find(s => String(s.email || '').toLowerCase() === userEmail);
+          const existingStudent = studentProfiles.find(s => String(s.email || '').toLowerCase().trim() === userEmail);
           if (existingStudent) {
             setAuthError("This email is already registered. Please click 'Sign in' instead.");
           } else {
@@ -523,7 +515,7 @@ export default function App() {
             setActiveSession(session);
           }
         } else {
-          const student = studentProfiles.find(s => String(s.email || '').toLowerCase() === userEmail && s.password === userPasswordHash);
+          const student = studentProfiles.find(s => String(s.email || '').toLowerCase().trim() === userEmail && String(s.password || '').trim() === userPasswordHash);
           if (student) {
             const session = { role: 'student', name: student.name, email: userEmail, studentId: student.studentId, userId: student.id };
             localStorage.setItem('olyst_session', JSON.stringify(session));
@@ -561,7 +553,7 @@ export default function App() {
     
     const emailToRegister = String(newTeacherForm.email || '').toLowerCase().trim();
     
-    if (teachersList.find(t => String(t.email || '').toLowerCase() === emailToRegister)) {
+    if (teachersList.find(t => String(t.email || '').toLowerCase().trim() === emailToRegister)) {
       setAuthError("A teacher with this email already exists.");
       return;
     }
@@ -775,36 +767,72 @@ export default function App() {
     setEditingQuestion({
       isNew: true, topic: '', text: '',
       options: [ { id: 'A', text: '' }, { id: 'B', text: '' }, { id: 'C', text: '' }, { id: 'D', text: '' } ],
-      correctId: 'A', explanation: ''
+      correctId: 'A', explanation: '', imageUrl: ''
     });
+    setImageFile(null);
     setAdminView('edit_question');
   };
 
   const saveQuestion = async (e) => {
     e.preventDefault();
     if (!selectedExam) return;
-    const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
-    const qData = {
-      examId: selectedExam.id, 
-      topic: editingQuestion.topic || '', 
-      text: editingQuestion.text || '',
-      options: editingQuestion.options || [], 
-      correctId: editingQuestion.correctId || 'A',
-      explanation: editingQuestion.explanation || '', 
-      order: editingQuestion.order || Date.now()
-    };
+    
+    setIsUploadingImage(true);
+    setAuthError('');
+    let uploadedImageUrl = editingQuestion.imageUrl || '';
 
     try {
+      // CLOUDINARY UPLOAD LOGIC
+      if (imageFile) {
+        if (CLOUDINARY_CLOUD_NAME === "YOUR_CLOUD_NAME") {
+          throw new Error("Please configure your Cloudinary Cloud Name and Upload Preset in the code.");
+        }
+
+        const formData = new FormData();
+        formData.append('file', imageFile);
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!uploadRes.ok) {
+          throw new Error("Failed to upload image to Cloudinary. Check if your upload preset is Unsigned.");
+        }
+        
+        const uploadData = await uploadRes.json();
+        uploadedImageUrl = uploadData.secure_url;
+      }
+
+      const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
+      const qData = {
+        examId: selectedExam.id, 
+        topic: editingQuestion.topic || '', 
+        text: editingQuestion.text || '',
+        options: editingQuestion.options || [], 
+        correctId: editingQuestion.correctId || 'A',
+        explanation: editingQuestion.explanation || '', 
+        imageUrl: uploadedImageUrl,
+        order: editingQuestion.order || Date.now()
+      };
+
       if (editingQuestion.isNew) {
         await addDoc(questionsRef, qData);
       } else {
         const docRef = doc(db, `artifacts/${appId}/public/data/questions/${editingQuestion.id}`);
         await updateDoc(docRef, qData);
       }
+      
       setEditingQuestion(null);
+      setImageFile(null);
       setAdminView('manage_questions');
     } catch (err) {
       console.error("Error saving question:", err);
+      setAuthError(err.message || "Failed to save the question.");
+      setTimeout(() => setAuthError(''), 6000);
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -843,7 +871,6 @@ export default function App() {
     reader.onload = async (event) => {
       try {
         const text = event.target.result;
-        // Split by newlines
         const rows = text.split(/\r?\n/).filter(row => row.trim().length > 0);
         
         if (rows.length <= 1) {
@@ -853,18 +880,15 @@ export default function App() {
         const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
         let addedCount = 0;
 
-        // Loop through rows (skip the first row assuming it is headers)
         for (let i = 1; i < rows.length; i++) {
-          // Regex to split by comma, but ignore commas inside double-quotes
           const values = rows[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => {
             let clean = s.trim();
             if (clean.startsWith('"') && clean.endsWith('"')) {
-              clean = clean.slice(1, -1).replace(/""/g, '"'); // Remove surrounding quotes
+              clean = clean.slice(1, -1).replace(/""/g, '"');
             }
             return clean;
           });
 
-          // Ensure row has at least 8 columns (Topic, Text, A, B, C, D, Correct, Explanation)
           if (values.length >= 8) {
             const qData = {
               examId: selectedExam.id,
@@ -878,7 +902,8 @@ export default function App() {
               ],
               correctId: (values[6] || 'A').toUpperCase().trim(),
               explanation: values[7] || '',
-              order: Date.now() + addedCount // Ensure sequential ordering
+              imageUrl: '', 
+              order: Date.now() + addedCount
             };
             await addDoc(questionsRef, qData);
             addedCount++;
@@ -893,7 +918,7 @@ export default function App() {
         setTimeout(() => setAuthError(''), 4000);
       } finally {
         setIsUploadingCSV(false);
-        e.target.value = ''; // Reset input so the same file can be selected again if needed
+        e.target.value = ''; 
       }
     };
     reader.readAsText(file);
@@ -1284,7 +1309,13 @@ export default function App() {
                         </div>
                         <div className="review-body">
                           <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q?.topic || ''}</div>
-                          <p className="subtitle mb-6">{q?.text || ''}</p>
+                          <p className="subtitle mb-4">{q?.text || ''}</p>
+                          
+                          {/* Render uploaded image if it exists */}
+                          {q?.imageUrl && (
+                            <img src={q.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginBottom: '1.5rem', objectFit: 'contain', border: '1px solid #e2e8f0' }} />
+                          )}
+
                           <div className="grid grid-cols-2 mb-6">
                             {(Array.isArray(q?.options) ? q.options : []).map((opt, oIdx) => {
                               const isThisUserChoice = userAnswer === opt?.id;
@@ -1394,6 +1425,7 @@ export default function App() {
                             <div className="flex-1">
                               <div className="text-muted font-bold mb-2" style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>{q?.topic || 'No Topic'}</div>
                               <p style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '1rem' }}>{q?.text || 'No text provided'}</p>
+                              {q?.imageUrl && <div className="mb-4 text-sm font-bold text-primary flex items-center gap-2"><ImageIcon size={16} /> Attached Image</div>}
                               <div className="grid grid-cols-2 gap-2" style={{ fontSize: '0.875rem' }}>
                                 {optionsArray.map((opt, oIdx) => (
                                   <div key={opt?.id || oIdx} style={{ padding: '0.5rem', border: '1px solid', borderColor: q?.correctId === opt?.id ? '#bbf7d0' : '#e2e8f0', backgroundColor: q?.correctId === opt?.id ? '#f0fdf4' : 'white', borderRadius: '0.5rem', color: q?.correctId === opt?.id ? '#166534' : '#475569' }}>
@@ -1404,7 +1436,7 @@ export default function App() {
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><EditIcon size={20} /></button>
+                            <button onClick={() => { setEditingQuestion(q); setImageFile(null); setAdminView('edit_question'); }} className="btn-icon"><EditIcon size={20} /></button>
                             <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><TrashIcon size={20} /></button>
                           </div>
                         </div>
@@ -1424,35 +1456,53 @@ export default function App() {
                   <button onClick={() => { setEditingQuestion(null); setAdminView('manage_questions'); }} className="btn-icon"><X size={24} /></button>
                 </div>
                 <form onSubmit={saveQuestion} style={{ padding: '2rem' }}>
+                  {authError && <div className="error-message mb-4">{authError}</div>}
                   <div className="admin-form-grid mb-6">
                     <div className="input-group col-span-2">
                       <label className="label">Topic / Category</label>
                       <input required type="text" value={editingQuestion.topic || ''} onChange={e => setEditingQuestion({...editingQuestion, topic: e.target.value})} className="input no-icon" placeholder="e.g. Algebra" />
                     </div>
+                    
+                    {/* NEW: IMAGE UPLOAD FEATURE WITH CLOUDINARY */}
+                    <div className="input-group col-span-2 p-4" style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '0.75rem' }}>
+                      <label className="label mb-2 flex items-center gap-2"><ImageIcon size={16}/> Question Image (Optional)</label>
+                      <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])} className="input no-icon" style={{ background: 'white', padding: '0.5rem' }} />
+                      {editingQuestion.imageUrl && !imageFile && (
+                        <div className="mt-3 text-sm flex items-center gap-2" style={{ color: '#2563eb' }}>
+                           <Check size={14} /> Currently has an image attached. Uploading a new one will replace it.
+                        </div>
+                      )}
+                    </div>
+
                     <div className="input-group col-span-2">
                       <label className="label">Question Text</label>
                       <textarea required rows={3} value={editingQuestion.text || ''} onChange={e => setEditingQuestion({...editingQuestion, text: e.target.value})} className="input no-icon" placeholder="What is the question?" />
                     </div>
+                    
                     {(Array.isArray(editingQuestion?.options) ? editingQuestion.options : []).map((opt, i) => (
                       <div className="input-group" key={opt?.id || i}>
                         <label className="label">Option {opt?.id || '?'}</label>
                         <input required type="text" value={opt?.text || ''} onChange={e => { const newOpts = [...(editingQuestion.options || [])]; if(newOpts[i]) newOpts[i].text = e.target.value; setEditingQuestion({...editingQuestion, options: newOpts}); }} className="input no-icon" style={{ borderColor: editingQuestion.correctId === opt?.id ? '#22c55e' : '#cbd5e1', backgroundColor: editingQuestion.correctId === opt?.id ? '#f0fdf4' : 'white' }} />
                       </div>
                     ))}
+                    
                     <div className="input-group col-span-2" style={{ background: '#eff6ff', padding: '1rem', borderRadius: '0.75rem', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                       <label className="label" style={{ margin: 0, color: '#1e3a8a' }}>Correct Answer:</label>
                       <select value={editingQuestion.correctId || 'A'} onChange={e => setEditingQuestion({...editingQuestion, correctId: e.target.value})} className="input no-icon" style={{ width: 'auto', fontWeight: 'bold', color: '#1d4ed8', padding: '0.5rem 2rem 0.5rem 1rem' }}>
                         <option value="A">Option A</option><option value="B">Option B</option><option value="C">Option C</option><option value="D">Option D</option>
                       </select>
                     </div>
+                    
                     <div className="input-group col-span-2 mb-0">
                       <label className="label">Explanation (Shown after exam)</label>
                       <textarea required rows={2} value={editingQuestion.explanation || ''} onChange={e => setEditingQuestion({...editingQuestion, explanation: e.target.value})} className="input no-icon" placeholder="Explain why the answer is correct..." />
                     </div>
                   </div>
                   <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
-                    <button type="button" onClick={() => { setEditingQuestion(null); setAdminView('manage_questions'); }} className="btn btn-outline">Cancel</button>
-                    <button type="submit" className="btn btn-primary"><Save size={18} /> Save Question</button>
+                    <button type="button" onClick={() => { setEditingQuestion(null); setImageFile(null); setAdminView('manage_questions'); }} className="btn btn-outline" disabled={isUploadingImage}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" disabled={isUploadingImage}>
+                      <Save size={18} /> {isUploadingImage ? 'Uploading Image...' : 'Save Question'}
+                    </button>
                   </div>
                 </form>
               </div>
@@ -1637,7 +1687,10 @@ export default function App() {
             </div>
             
             <div className="question-box">
-              <p style={{ fontSize: '1.25rem', fontWeight: 500 }}>{currentQuestion?.text || ''}</p>
+              <p style={{ fontSize: '1.25rem', fontWeight: 500, marginBottom: currentQuestion?.imageUrl ? '1rem' : '0' }}>{currentQuestion?.text || ''}</p>
+              {currentQuestion?.imageUrl && (
+                 <img src={currentQuestion.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '0.5rem', objectFit: 'contain', border: '1px solid #e2e8f0', marginBottom: '1rem' }} />
+              )}
             </div>
             
             <div className="mb-8">
@@ -1781,7 +1834,13 @@ export default function App() {
                     </div>
                     <div className="review-body">
                       <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q?.topic || ''}</div>
-                      <p className="subtitle mb-6">{q?.text || ''}</p>
+                      <p className="subtitle mb-4">{q?.text || ''}</p>
+                      
+                      {/* Render uploaded image if it exists */}
+                      {q?.imageUrl && (
+                         <img src={q.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginBottom: '1.5rem', objectFit: 'contain', border: '1px solid #e2e8f0' }} />
+                      )}
+
                       <div className="grid grid-cols-2 mb-6">
                         {(Array.isArray(q?.options) ? q.options : []).map((opt, oIdx) => {
                           const isThisUserChoice = userAnswer === opt?.id;
