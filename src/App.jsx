@@ -121,6 +121,14 @@ const MathLiveInput = ({ value, onChange, placeholder }) => {
   );
 };
 
+// --- SECURITY UTILITY: PASSWORD HASHING ---
+const hashPassword = async (password) => {
+  const msgBuffer = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
 // --- FIREBASE INITIALIZATION ---
 const firebaseConfig = {
   apiKey: "AIzaSyAW3I1jRHHzkLHRVQ_BU6wsZfnpphqPNOs",
@@ -186,6 +194,7 @@ const styles = `
   .card { background: white; border-radius: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; padding: 2rem; }
   .card-header { background: #0f172a; color: white; padding: 2rem; text-align: center; border-radius: 1rem 1rem 0 0; margin: -2rem -2rem 2rem -2rem; }
   .card-header-icon { width: 4rem; height: 4rem; background: rgba(37,99,235,0.2); color: #60a5fa; border-radius: 1rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto; border: 1px solid rgba(59,130,246,0.3); }
+  .card-header-icon.admin { background: rgba(139,92,246,0.2); color: #c4b5fd; border-color: rgba(139,92,246,0.3); }
   
   .text-center { text-align: center; }
   .text-right { text-align: right; }
@@ -208,9 +217,11 @@ const styles = `
   .btn-outline:hover:not(:disabled) { background: #f8fafc; }
   .btn-danger { background: #fef2f2; color: #ef4444; border-color: #fca5a5; }
   .btn-danger:hover:not(:disabled) { background: #fee2e2; }
-  .btn-icon { padding: 0.5rem; border-radius: 0.5rem; color: #94a3b8; background: transparent; }
+  .btn-icon { padding: 0.5rem; border-radius: 0.5rem; color: #94a3b8; background: transparent; cursor: pointer; border: none; outline: none; }
   .btn-icon:hover { color: #2563eb; background: #eff6ff; }
   .btn-icon-danger:hover { color: #ef4444; background: #fef2f2; }
+  .btn-link { color: #2563eb; font-weight: 600; background: none; border: none; cursor: pointer; padding: 0.5rem; transition: 0.2s; }
+  .btn-link:hover { text-decoration: underline; color: #1d4ed8; }
   
   .w-full { width: 100%; }
   .mt-2 { margin-top: 0.5rem; }
@@ -251,9 +262,10 @@ const styles = `
   .history-icon { background: white; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #e2e8f0; color: #94a3b8; }
   
   .question-box { background: white; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 2rem; margin-bottom: 1.5rem; }
-  .option-btn { width: 100%; text-align: left; padding: 1.25rem; border: 2px solid #e2e8f0; background: white; border-radius: 0.75rem; margin-bottom: 0.75rem; cursor: pointer; display: flex; align-items: center; font-size: 1.125rem; transition: 0.2s; }
+  .option-btn { width: 100%; text-align: left; padding: 1.25rem; border: 2px solid #e2e8f0; background: white; border-radius: 0.75rem; margin-bottom: 0.75rem; cursor: pointer; display: flex; align-items: center; font-size: 1.125rem; transition: 0.2s; outline: none; }
   .option-btn:hover { border-color: #bfdbfe; background: #f8fafc; }
   .option-btn.selected { border-color: #2563eb; background: #eff6ff; }
+  .option-btn:disabled { cursor: default; }
   .option-letter { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border: 2px solid #cbd5e1; border-radius: 0.5rem; margin-right: 1rem; font-weight: 700; background: #f1f5f9; color: #64748b; }
   .option-btn.selected .option-letter { background: #2563eb; color: white; border-color: #2563eb; }
   
@@ -273,9 +285,10 @@ const styles = `
   .result-circle { width: 12rem; height: 12rem; border: 8px solid #f1f5f9; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0 auto 2rem; }
   .result-score { font-size: 3.5rem; font-weight: 900; line-height: 1; color: #0f172a; }
   
-  .role-toggle { display: flex; background: #f1f5f9; padding: 0.375rem; border-radius: 1rem; margin-bottom: 1.5rem; gap: 0.375rem; }
-  .role-btn { flex: 1; padding: 0.75rem; text-align: center; font-size: 0.875rem; font-weight: 700; color: #64748b; border-radius: 0.75rem; cursor: pointer; border: none; background: transparent; transition: 0.2s; }
-  .role-btn.active { background: white; color: #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+  .role-toggle { display: flex; background: #e2e8f0; padding: 0.375rem; border-radius: 0.75rem; margin-bottom: 1.5rem; gap: 0.375rem; }
+  .role-btn { flex: 1; padding: 0.75rem 0.5rem; text-align: center; font-size: 0.875rem; font-weight: 700; color: #64748b; border-radius: 0.5rem; cursor: pointer; border: none; outline: none; background: transparent; transition: all 0.2s ease; appearance: none; white-space: nowrap; }
+  .role-btn:hover { color: #334155; }
+  .role-btn.active { background: white; color: #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,0.1); pointer-events: none; }
   
   .admin-form-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
   @media (min-width: 768px) {
@@ -303,6 +316,9 @@ const styles = `
   
   .empty-state { border: 2px dashed #cbd5e1; padding: 3rem; text-align: center; border-radius: 1rem; background: white; }
   
+  .error-message { background: #fef2f2; color: #ef4444; border: 1px solid #fca5a5; padding: 1rem; border-radius: 0.75rem; font-weight: 600; text-align: center; font-size: 0.875rem; }
+  .success-message { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 1rem; border-radius: 0.75rem; font-weight: 600; text-align: center; font-size: 0.875rem; }
+
   @media (max-width: 640px) {
     .nav { padding: 1rem; }
     .container { padding: 1rem; }
@@ -314,24 +330,47 @@ const styles = `
 `;
 
 export default function App() {
-  const [appState, setAppState] = useState('loading'); // 'loading', 'login', 'home', 'exam_intro', 'exam', 'results', 'admin'
+  const [appState, setAppState] = useState('loading'); 
   
-  // Auth & DB State
-  const [user, setUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
-  const [pastResults, setPastResults] = useState([]);
-  const [localAuthActive, setLocalAuthActive] = useState(false);
+  // Persistent active session handled locally for multi-device sync
+  const [activeSession, setActiveSession] = useState(() => {
+    const saved = localStorage.getItem('olyst_session');
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      localStorage.removeItem('olyst_session');
+      return null;
+    }
+  });
+
+  const [user, setUser] = useState(null); // Keep for Firebase backend auth
 
   // Login Form
-  const [authForm, setAuthForm] = useState({ name: '', email: '', role: 'student' });
+  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
+  const [loginMode, setLoginMode] = useState('student'); // 'student', 'teacher', or 'admin'
+  const [isRegistering, setIsRegistering] = useState(false); 
 
-  // Exam Data State (Dynamic)
+  // SuperAdmin state
+  const [newTeacherForm, setNewTeacherForm] = useState({ name: '', email: '', password: '' });
+  const [hashInput, setHashInput] = useState('');
+  const [generatedHash, setGeneratedHash] = useState('');
+  const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+
+  // Global DB Data
+  const [adminsList, setAdminsList] = useState([]);
+  const [teachersList, setTeachersList] = useState([]);
+  const [studentProfiles, setStudentProfiles] = useState([]);
   const [exams, setExams] = useState([]);
   const [allQuestions, setAllQuestions] = useState([]);
+  const [allResults, setAllResults] = useState([]); 
+  
+  const [pastResults, setPastResults] = useState([]);
   const [selectedExam, setSelectedExam] = useState(null);
+  const [sessionQuestions, setSessionQuestions] = useState([]); 
+  const [examMode, setExamMode] = useState('timed'); 
 
   // Student Exam Session State
   const [currentQIndex, setCurrentQIndex] = useState(0);
@@ -342,6 +381,7 @@ export default function App() {
 
   // Admin Builder State
   const [adminView, setAdminView] = useState('list_exams'); 
+  const [homeView, setHomeView] = useState('dashboard');
   const [editingExamDetails, setEditingExamDetails] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [isUploadingCSV, setIsUploadingCSV] = useState(false);
@@ -349,64 +389,71 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (error) {
         console.error("Auth init error:", error);
       }
     };
     initAuth();
 
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      if (!u) setAppState('login');
-    });
+    const unsubscribe = onAuthStateChanged(auth, setUser);
     return () => unsubscribe();
   }, []);
 
+  // 1. Fetch Public Collections
   useEffect(() => {
-    if (!user) return;
+    const publicDataPath = `artifacts/${appId}/public/data`;
 
-    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-    const unsubProfile = onSnapshot(profileRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setUserProfile(data);
-        setLocalAuthActive(true);
-        if (appState === 'loading' || appState === 'login') {
-          setAppState(data.role === 'teacher' ? 'admin' : 'home');
-        }
-      } else {
-        setAppState('login');
-      }
-    }, (error) => console.error("Error fetching profile:", error));
+    const unsubAdmins = onSnapshot(collection(db, `${publicDataPath}/admins`), (snapshot) => {
+      setAdminsList(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
 
-    const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams');
-    const unsubExams = onSnapshot(examsRef, (snapshot) => {
+    const unsubTeachers = onSnapshot(collection(db, `${publicDataPath}/teachers`), (snapshot) => {
+      setTeachersList(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const unsubStudents = onSnapshot(collection(db, `${publicDataPath}/studentProfiles`), (snapshot) => {
+      setStudentProfiles(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
+    const unsubExams = onSnapshot(collection(db, `${publicDataPath}/exams`), (snapshot) => {
       const loadedExams = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       loadedExams.sort((a, b) => b.createdAt - a.createdAt); 
       setExams(loadedExams);
     });
 
-    const questionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions');
-    const unsubQuestions = onSnapshot(questionsRef, (snapshot) => {
+    const unsubQuestions = onSnapshot(collection(db, `${publicDataPath}/questions`), (snapshot) => {
       setAllQuestions(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
-    return () => { 
-      unsubProfile(); 
-      unsubExams(); 
-      unsubQuestions(); 
-    };
-  }, [user]);
+    const unsubAllResults = onSnapshot(collection(db, `${publicDataPath}/allResults`), (snapshot) => {
+      setAllResults(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
 
-  // Separate useEffect for private results
+    return () => { unsubAdmins(); unsubTeachers(); unsubStudents(); unsubExams(); unsubQuestions(); unsubAllResults(); };
+  }, []);
+
+  // 2. Routing based on Active Session
   useEffect(() => {
-    if (user && localAuthActive && userProfile?.role !== 'teacher') {
-      const q = collection(db, 'artifacts', appId, 'users', user.uid, 'results');
+    if (activeSession) {
+      if (activeSession.role === 'superadmin') {
+        setAppState('superadmin');
+      } else if (activeSession.role === 'teacher') {
+        setAppState('admin');
+        setAdminView('list_exams');
+      } else {
+        setAppState('home');
+        setHomeView('dashboard');
+      }
+    } else {
+      setAppState('login');
+    }
+  }, [activeSession]);
+
+  // 3. Fetch private results for logged in Student
+  useEffect(() => {
+    if (activeSession && activeSession.role === 'student' && user) {
+      const q = collection(db, `artifacts/${appId}/users/${activeSession.studentId}/results`);
       const unsubResults = onSnapshot(q, (snapshot) => {
         const results = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         results.sort((a, b) => b.timestamp - a.timestamp);
@@ -417,7 +464,7 @@ export default function App() {
     } else {
       setPastResults([]);
     }
-  }, [user, localAuthActive, userProfile]);
+  }, [activeSession, user]);
 
   // Load KaTeX scripts dynamically for the whole app
   useEffect(() => {
@@ -465,45 +512,150 @@ export default function App() {
 
   const currentQuestions = getCurrentExamQuestions();
 
-  const handleCreateProfile = async (e) => {
+  const handleAuthSubmit = async (e) => {
     e.preventDefault();
-    if (!user) return;
+    setAuthError('');
     setIsSubmittingAuth(true);
+
+    const userEmail = String(authForm.email || '').toLowerCase().trim();
+    const userPasswordHash = await hashPassword(authForm.password || '');
+
     try {
-      const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-      await setDoc(profileRef, {
-        name: authForm.name,
-        email: authForm.email,
-        role: authForm.role,
-        createdAt: Date.now()
-      });
-    } catch (error) {
-      console.error("Error creating profile:", error);
+      if (loginMode === 'admin') {
+        const adminUser = adminsList.find(a => String(a.email || '').toLowerCase().trim() === userEmail && String(a.password || '').trim() === userPasswordHash);
+        if (adminUser) {
+          const session = { role: 'superadmin', name: 'System Admin', email: userEmail, userId: adminUser.id };
+          localStorage.setItem('olyst_session', JSON.stringify(session));
+          setActiveSession(session);
+        } else {
+          setAuthError("Invalid admin credentials. Please check your system admin email and password.");
+        }
+      } else if (loginMode === 'teacher') {
+        const teacher = teachersList.find(t => String(t.email || '').toLowerCase().trim() === userEmail && String(t.password || '').trim() === userPasswordHash);
+        if (teacher) {
+          const session = { role: 'teacher', name: teacher.name || 'Teacher', email: userEmail, studentId: 'teacher', userId: teacher.id };
+          localStorage.setItem('olyst_session', JSON.stringify(session));
+          setActiveSession(session);
+        } else {
+          setAuthError("Invalid teacher credentials. Please verify your email and password or contact the system admin.");
+        }
+      } else {
+        if (isRegistering) {
+          const existingStudent = studentProfiles.find(s => String(s.email || '').toLowerCase().trim() === userEmail);
+          if (existingStudent) {
+            setAuthError("This email is already registered. Please click 'Sign in' instead.");
+          } else {
+            const newStudentId = `stu_${Date.now()}`;
+            const newDocRef = await addDoc(collection(db, `artifacts/${appId}/public/data/studentProfiles`), {
+              email: userEmail, password: userPasswordHash, name: authForm.name, studentId: newStudentId, createdAt: Date.now()
+            });
+            const session = { role: 'student', name: authForm.name, email: userEmail, studentId: newStudentId, userId: newDocRef.id };
+            localStorage.setItem('olyst_session', JSON.stringify(session));
+            setActiveSession(session);
+          }
+        } else {
+          const student = studentProfiles.find(s => String(s.email || '').toLowerCase().trim() === userEmail && String(s.password || '').trim() === userPasswordHash);
+          if (student) {
+            const session = { role: 'student', name: student.name, email: userEmail, studentId: student.studentId, userId: student.id };
+            localStorage.setItem('olyst_session', JSON.stringify(session));
+            setActiveSession(session);
+          } else {
+            setAuthError("Invalid student credentials. Please verify your email and password.");
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Auth Error:", err);
+      setAuthError(`Database Error: ${err.message}`);
     } finally {
       setIsSubmittingAuth(false);
     }
   };
 
-  const handleLocalLogin = (e) => {
+  const handleLogout = () => {
+    localStorage.removeItem('olyst_session');
+    setActiveSession(null);
+    setAuthForm({ name: '', email: '', password: '' });
+    setSelectedExam(null);
+    setAuthError('');
+    setAuthSuccess('');
+    setIsRegistering(false);
+    setHomeView('dashboard');
+    setAdminView('list_exams');
+    setAppState('login');
+  };
+
+  const handleRegisterTeacher = async (e) => {
     e.preventDefault();
-    if (userProfile && authForm.email.toLowerCase() === userProfile.email.toLowerCase()) {
-      setLocalAuthActive(true);
-      if (userProfile.role === 'teacher') {
-        setAdminView('list_exams');
-        setAppState('admin');
-      } else {
-        setAppState('home');
-      }
-    } else {
-      setAuthForm({...authForm, email: ''});
+    setAuthError('');
+    setAuthSuccess('');
+    
+    const emailToRegister = String(newTeacherForm.email || '').toLowerCase().trim();
+    
+    if (teachersList.find(t => String(t.email || '').toLowerCase().trim() === emailToRegister)) {
+      setAuthError("A teacher with this email already exists.");
+      return;
+    }
+
+    try {
+      const hashedPassword = await hashPassword(newTeacherForm.password);
+      await addDoc(collection(db, `artifacts/${appId}/public/data/teachers`), {
+        name: newTeacherForm.name,
+        email: emailToRegister,
+        password: hashedPassword,
+        createdAt: Date.now()
+      });
+      setAuthSuccess(`Successfully created account for ${newTeacherForm.name}!`);
+      setNewTeacherForm({ name: '', email: '', password: '' });
+    } catch (err) {
+      console.error("Error creating teacher:", err);
+      setAuthError("Failed to create teacher account.");
     }
   };
 
-  const handleLogout = () => {
-    setLocalAuthActive(false);
-    setAuthForm({ name: '', email: '', role: 'student' });
-    setSelectedExam(null);
-    setAppState('login');
+  const handleDeleteTeacher = async (teacherId) => {
+    if (!window.confirm("Are you sure you want to delete this teacher account? This action cannot be undone.")) return;
+    try {
+      await deleteDoc(doc(db, `artifacts/${appId}/public/data/teachers/${teacherId}`));
+      setAuthSuccess("Teacher account permanently deleted.");
+      setTimeout(() => setAuthSuccess(''), 3000);
+    } catch (err) {
+      console.error("Error deleting teacher:", err);
+      setAuthError("Failed to delete teacher account.");
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthSuccess('');
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setAuthError("Passwords do not match.");
+      return;
+    }
+
+    if (!activeSession?.userId) {
+      setAuthError("Session expired. Please log out and sign in again to use this feature.");
+      return;
+    }
+
+    try {
+      const hashedPassword = await hashPassword(passwordForm.newPassword);
+      const collectionName = activeSession.role === 'teacher' ? 'teachers' : 'studentProfiles';
+      const docRef = doc(db, `artifacts/${appId}/public/data/${collectionName}/${activeSession.userId}`);
+      await updateDoc(docRef, { password: hashedPassword });
+      setAuthSuccess("Your password has been successfully updated!");
+      setPasswordForm({ newPassword: '', confirmPassword: '' });
+      setTimeout(() => {
+        if (activeSession.role === 'teacher') setAdminView('list_exams');
+        else setHomeView('dashboard');
+        setAuthSuccess('');
+      }, 2500);
+    } catch (err) {
+      console.error("Error changing password:", err);
+      setAuthError("Failed to update password.");
+    }
   };
 
   const selectExamForTaking = (exam) => {
@@ -531,9 +683,9 @@ export default function App() {
     const percentage = Math.round((score / currentQuestions.length) * 100);
     setCurrentScore({ score, percentage });
 
-    if (user && localAuthActive && userProfile?.role !== 'teacher') {
+    if (activeSession && activeSession.role === 'student' && user) {
       try {
-        const resultsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'results');
+        const resultsRef = collection(db, `artifacts/${appId}/users/${activeSession.studentId}/results`);
         await addDoc(resultsRef, {
           examId: selectedExam.id,
           examTitle: selectedExam.title,
@@ -561,12 +713,12 @@ export default function App() {
   };
 
   const seedDemoExam = async () => {
-    if (!user) return;
+    if (!activeSession) return;
     try {
-      const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams');
+      const examsRef = collection(db, `artifacts/${appId}/public/data/exams`);
       const examDocRef = await addDoc(examsRef, { ...DEFAULT_EXAM, createdAt: Date.now() });
 
-      const questionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions');
+      const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
       for (let i = 0; i < DEFAULT_QUESTIONS.length; i++) {
         await addDoc(questionsRef, { 
           ...DEFAULT_QUESTIONS[i], 
@@ -586,9 +738,9 @@ export default function App() {
 
   const saveExamDetails = async (e) => {
     e.preventDefault();
-    if (!user) return;
+    if (!activeSession) return;
     
-    const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams');
+    const examsRef = collection(db, `artifacts/${appId}/public/data/exams`);
     const examData = {
       title: editingExamDetails.title,
       description: editingExamDetails.description,
@@ -601,7 +753,7 @@ export default function App() {
         examData.createdAt = Date.now();
         await addDoc(examsRef, examData);
       } else {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'exams', editingExamDetails.id);
+        const docRef = doc(db, `artifacts/${appId}/public/data/exams/${editingExamDetails.id}`);
         await updateDoc(docRef, examData);
       }
       setAdminView('list_exams');
@@ -612,12 +764,12 @@ export default function App() {
   };
 
   const deleteExam = async (examId) => {
-    if (!user || !window.confirm("Are you sure? This will delete the exam.")) return;
+    if (!activeSession || !window.confirm("Are you sure? This will delete the exam.")) return;
     try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'exams', examId));
+      await deleteDoc(doc(db, `artifacts/${appId}/public/data/exams/${examId}`));
       const qsToDelete = allQuestions.filter(q => q.examId === examId);
       qsToDelete.forEach(async (q) => {
-         await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'questions', q.id));
+         await deleteDoc(doc(db, `artifacts/${appId}/public/data/questions/${q.id}`));
       });
     } catch (err) {
       console.error("Error deleting exam:", err);
@@ -635,9 +787,9 @@ export default function App() {
 
   const saveQuestion = async (e) => {
     e.preventDefault();
-    if (!user || !selectedExam) return;
+    if (!activeSession || !selectedExam) return;
     
-    const questionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions');
+    const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
     const qData = {
       examId: selectedExam.id, topic: editingQuestion.topic, text: editingQuestion.text,
       options: editingQuestion.options, correctId: editingQuestion.correctId,
@@ -648,7 +800,7 @@ export default function App() {
       if (editingQuestion.isNew) {
         await addDoc(questionsRef, qData);
       } else {
-        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'questions', editingQuestion.id);
+        const docRef = doc(db, `artifacts/${appId}/public/data/questions/${editingQuestion.id}`);
         await updateDoc(docRef, qData);
       }
       setEditingQuestion(null);
@@ -659,9 +811,9 @@ export default function App() {
   };
 
   const deleteQuestion = async (id) => {
-    if (!user || !window.confirm('Are you sure you want to delete this question?')) return;
+    if (!activeSession || !window.confirm('Are you sure you want to delete this question?')) return;
     try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'questions', id));
+      await deleteDoc(doc(db, `artifacts/${appId}/public/data/questions/${id}`));
     } catch (err) {
       console.error("Error deleting question:", err);
     }
@@ -684,7 +836,7 @@ export default function App() {
 
   const handleCSVUpload = async (e) => {
     const file = e.target.files[0];
-    if (!file || !selectedExam || !user) return;
+    if (!file || !selectedExam || !activeSession) return;
 
     setIsUploadingCSV(true);
     setAuthError('');
@@ -700,7 +852,7 @@ export default function App() {
           throw new Error("CSV appears to be empty or missing data rows.");
         }
 
-        const questionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions');
+        const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
         let addedCount = 0;
 
         for (let i = 1; i < rows.length; i++) {
@@ -760,27 +912,36 @@ export default function App() {
     }
 
     if (appState === 'login') {
-      const isReturningUser = userProfile !== null && !localAuthActive;
       return (
         <div className="min-h-screen flex items-center justify-center" style={{ padding: '1.5rem' }}>
-          <div className="card container-sm" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="card container-sm" style={{ padding: 0, overflow: 'hidden', width: '100%' }}>
             <div className="card-header">
-              <div className="card-header-icon"><Calculator size={32} /></div>
+              <div className={`card-header-icon ${loginMode === 'admin' ? 'admin' : ''}`}>
+                {loginMode === 'admin' ? <Shield size={32} /> : <Calculator size={32} />}
+              </div>
               <h1 className="title" style={{ color: 'white' }}>Olyst Platform</h1>
               <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Interactive Assessment Environment</p>
             </div>
             <div style={{ padding: '2rem' }}>
-              <h2 className="subtitle text-center mb-6">
-                {isReturningUser ? `Welcome back, ${userProfile.name}` : 'Create an Account'}
-              </h2>
-              <form onSubmit={isReturningUser ? handleLocalLogin : handleCreateProfile}>
-                {!isReturningUser && (
-                  <div className="role-toggle">
-                    <button type="button" onClick={() => setAuthForm({...authForm, role: 'student'})} className={`role-btn ${authForm.role === 'student' ? 'active' : ''}`}>Student</button>
-                    <button type="button" onClick={() => setAuthForm({...authForm, role: 'teacher'})} className={`role-btn ${authForm.role === 'teacher' ? 'active' : ''}`}>Teacher Admin</button>
-                  </div>
-                )}
-                {!isReturningUser && (
+              
+              <div className="role-toggle">
+                <button type="button" onClick={() => { setLoginMode('student'); setAuthError(''); setIsRegistering(false); }} className={`role-btn ${loginMode === 'student' ? 'active' : ''}`}>Student</button>
+                <button type="button" onClick={() => { setLoginMode('teacher'); setAuthError(''); setIsRegistering(false); }} className={`role-btn ${loginMode === 'teacher' ? 'active' : ''}`}>Teacher</button>
+                <button type="button" onClick={() => { setLoginMode('admin'); setAuthError(''); setIsRegistering(false); }} className={`role-btn ${loginMode === 'admin' ? 'active' : ''}`}>Admin</button>
+              </div>
+
+              {authError && (
+                <div className="error-message mb-6">
+                  {authError}
+                </div>
+              )}
+
+              <form onSubmit={handleAuthSubmit}>
+                <h2 className="subtitle text-center mb-6">
+                  {loginMode === 'admin' ? 'System Admin Sign In' : (loginMode === 'teacher' ? 'Teacher Sign In' : (isRegistering ? 'Create Student Account' : 'Student Sign In'))}
+                </h2>
+                
+                {isRegistering && loginMode === 'student' && (
                   <div className="input-group">
                     <label className="label">Full Name</label>
                     <div className="input-wrapper">
@@ -789,19 +950,131 @@ export default function App() {
                     </div>
                   </div>
                 )}
+
                 <div className="input-group">
                   <label className="label">Email Address</label>
                   <div className="input-wrapper">
                     <Mail size={18} className="input-icon" />
-                    <input type="email" required value={authForm.email} onChange={(e) => setAuthForm({...authForm, email: e.target.value})} className="input" placeholder={authForm.role === 'teacher' ? "teacher@school.edu" : "student@school.edu"} />
+                    <input type="email" required value={authForm.email} onChange={(e) => setAuthForm({...authForm, email: e.target.value})} className="input" placeholder={loginMode === 'admin' ? "admin@system.com" : (loginMode === 'teacher' ? "teacher@school.edu" : "student@school.edu")} />
                   </div>
                 </div>
+
+                <div className="input-group">
+                  <label className="label">Password</label>
+                  <div className="input-wrapper">
+                    <Lock size={18} className="input-icon" />
+                    <input type="password" required value={authForm.password || ''} onChange={(e) => setAuthForm({...authForm, password: e.target.value})} className="input" placeholder="••••••••" />
+                  </div>
+                </div>
+
                 <button type="submit" disabled={isSubmittingAuth} className="btn btn-primary w-full mt-4">
-                  {isSubmittingAuth ? 'Saving...' : (isReturningUser ? 'Enter Portal' : 'Complete Registration')} <ArrowRight size={18} />
+                  {isSubmittingAuth ? 'Processing...' : (isRegistering && loginMode === 'student' ? 'Complete Registration' : 'Secure Sign In')} <ArrowRight size={18} />
                 </button>
               </form>
+
+              {loginMode === 'student' && (
+                <div className="text-center mt-6">
+                  <button type="button" onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); setAuthForm({ name: '', email: '', password: '' }); }} className="btn-link">
+                    {isRegistering ? "Already have an account? Sign in" : "Don't have an account? Register"}
+                  </button>
+                </div>
+              )}
+
             </div>
           </div>
+        </div>
+      );
+    }
+
+    if (appState === 'superadmin') {
+      return (
+        <div className="min-h-screen">
+          <nav className="nav dark">
+            <div className="nav-brand"><Shield size={24} color="#a78bfa" /> <span className="hidden-sm">System Admin Portal</span></div>
+            <div className="flex items-center gap-4">
+              <span className="badge hidden-sm">Admin Access</span>
+              <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }}><LogOut size={16} /> <span className="hidden-sm">Logout</span></button>
+            </div>
+          </nav>
+          <main className="container">
+             <div className="grid md:grid-cols-2 gap-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
+               
+               <div className="card">
+                 <h2 className="title mb-6 flex items-center gap-3"><User size={24} color="#2563eb" /> Register New Teacher</h2>
+                 {authError && <div className="error-message mb-4">{authError}</div>}
+                 {authSuccess && <div className="success-message mb-4">{authSuccess}</div>}
+                 <form onSubmit={handleRegisterTeacher}>
+                    <div className="input-group">
+                      <label className="label">Teacher Full Name</label>
+                      <div className="input-wrapper">
+                        <User size={18} className="input-icon" />
+                        <input type="text" required value={newTeacherForm.name} onChange={(e) => setNewTeacherForm({...newTeacherForm, name: e.target.value})} className="input" placeholder="e.g. Jane Smith" />
+                      </div>
+                    </div>
+                    <div className="input-group">
+                      <label className="label">Teacher Email</label>
+                      <div className="input-wrapper">
+                        <Mail size={18} className="input-icon" />
+                        <input type="email" required value={newTeacherForm.email} onChange={(e) => setNewTeacherForm({...newTeacherForm, email: e.target.value})} className="input" placeholder="teacher@school.edu" />
+                      </div>
+                    </div>
+                    <div className="input-group mb-6">
+                      <label className="label">Temporary Password</label>
+                      <div className="input-wrapper">
+                        <Lock size={18} className="input-icon" />
+                        <input type="text" required value={newTeacherForm.password} onChange={(e) => setNewTeacherForm({...newTeacherForm, password: e.target.value})} className="input" placeholder="Assign a password" />
+                      </div>
+                    </div>
+                    <button type="submit" className="btn btn-primary w-full"><Plus size={18} /> Create Teacher Account</button>
+                 </form>
+               </div>
+
+               <div className="card">
+                 <h2 className="title mb-6 flex items-center gap-3"><Key size={24} color="#2563eb" /> Password Hash Generator</h2>
+                 <p className="text-muted mb-4">Generate exact SHA-256 hashes for manual database entry.</p>
+                 <div className="input-group mb-4">
+                   <div className="input-wrapper">
+                     <Lock size={18} className="input-icon" />
+                     <input type="text" value={hashInput} onChange={async (e) => {
+                       setHashInput(e.target.value);
+                       if(e.target.value) setGeneratedHash(await hashPassword(e.target.value));
+                       else setGeneratedHash('');
+                     }} className="input" placeholder="Type password here..." />
+                   </div>
+                 </div>
+                 {generatedHash && (
+                   <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '0.5rem', wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.875rem', border: '1px solid #cbd5e1' }}>
+                     {generatedHash}
+                   </div>
+                 )}
+               </div>
+
+               <div className="card col-span-2" style={{ padding: 0, overflow: 'hidden' }}>
+                 <div className="card-header" style={{ margin: 0, borderRadius: 0, padding: '1.5rem', textAlign: 'left', background: '#f8fafc', color: '#0f172a', borderBottom: '1px solid #e2e8f0' }}>
+                   <h2 className="subtitle" style={{ margin: 0 }}>Registered Teachers</h2>
+                 </div>
+                 <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                   {teachersList.length === 0 ? (
+                     <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No teachers registered yet.</div>
+                   ) : (
+                     teachersList.map((teacher, idx) => (
+                       <div key={teacher.id || idx} className="admin-list-item" style={{ alignItems: 'center' }}>
+                         <div className="flex-1">
+                           <div className="font-bold">{teacher.name || 'Unnamed Teacher'}</div>
+                           <div className="text-muted" style={{ fontSize: '0.875rem' }}>{teacher.email}</div>
+                         </div>
+                         <div className="flex items-center gap-3">
+                           <div className="badge">Active</div>
+                           <button onClick={() => handleDeleteTeacher(teacher.id)} className="btn-icon btn-icon-danger" title="Delete Teacher"><Trash2 size={18} /></button>
+                         </div>
+                       </div>
+                     ))
+                   )}
+                 </div>
+               </div>
+
+             </div>
+          </main>
         </div>
       );
     }
@@ -812,11 +1085,47 @@ export default function App() {
           <nav className="nav dark">
             <div className="nav-brand"><Settings size={24} color="#60a5fa" /> <span className="hidden-sm">Olyst Admin Portal</span></div>
             <div className="flex items-center gap-4">
-              <span className="badge hidden-sm">Teacher: {userProfile?.name}</span>
+              <span className="badge hidden-sm">Teacher: {activeSession?.name}</span>
+              <button onClick={() => { setAuthError(''); setAuthSuccess(''); setAdminView('change_password'); }} className="btn" style={{ padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.1)', color: 'white' }}>
+                <Key size={16} /> <span className="hidden-sm">Password</span>
+              </button>
               <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }}><LogOut size={16} /> <span className="hidden-sm">Logout</span></button>
             </div>
           </nav>
           <main className="container">
+            {adminView === 'change_password' && (
+              <div className="card container-sm" style={{ padding: 0, overflow: 'hidden', margin: '0 auto' }}>
+                <div className="nav">
+                  <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Key size={20} color="#2563eb" /> Update Password
+                  </h2>
+                  <button onClick={() => setAdminView('list_exams')} className="btn-icon"><X size={24} /></button>
+                </div>
+                <form onSubmit={handleChangePassword} style={{ padding: '2rem' }}>
+                  {authError && <div className="error-message mb-4">{authError}</div>}
+                  {authSuccess && <div className="success-message mb-4">{authSuccess}</div>}
+                  <div className="input-group">
+                    <label className="label">New Password</label>
+                    <div className="input-wrapper">
+                      <Lock size={18} className="input-icon" />
+                      <input type="password" required minLength="6" value={passwordForm.newPassword} onChange={e => setPasswordForm({...passwordForm, newPassword: e.target.value})} className="input" placeholder="Enter new password" />
+                    </div>
+                  </div>
+                  <div className="input-group mb-8">
+                    <label className="label">Confirm New Password</label>
+                    <div className="input-wrapper">
+                      <Lock size={18} className="input-icon" />
+                      <input type="password" required minLength="6" value={passwordForm.confirmPassword} onChange={e => setPasswordForm({...passwordForm, confirmPassword: e.target.value})} className="input" placeholder="Confirm new password" />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
+                    <button type="button" onClick={() => setAdminView('list_exams')} className="btn btn-outline">Cancel</button>
+                    <button type="submit" className="btn btn-primary"><Save size={18} /> Update Password</button>
+                  </div>
+                </form>
+              </div>
+            )}
+
             {adminView === 'list_exams' && (
               <>
                 <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
@@ -986,7 +1295,6 @@ export default function App() {
                     
                     <div className="input-group col-span-2">
                       <label className="label">Question Text</label>
-                      {/* REPLACED textarea WITH MathLiveInput */}
                       <MathLiveInput 
                         value={editingQuestion.text} 
                         onChange={newText => setEditingQuestion({...editingQuestion, text: newText})}
@@ -997,7 +1305,6 @@ export default function App() {
                     {editingQuestion.options.map((opt, i) => (
                       <div className="input-group" key={opt.id}>
                         <label className="label">Option {opt.id}</label>
-                        {/* REPLACED input WITH MathLiveInput */}
                         <div style={{ border: editingQuestion.correctId === opt.id ? '2px solid #22c55e' : 'none', borderRadius: '0.75rem', padding: editingQuestion.correctId === opt.id ? '2px' : '0' }}>
                            <MathLiveInput 
                              value={opt.text} 
@@ -1017,7 +1324,6 @@ export default function App() {
                     
                     <div className="input-group col-span-2 mb-0">
                       <label className="label">Explanation (Shown after exam)</label>
-                      {/* REPLACED textarea WITH MathLiveInput */}
                       <MathLiveInput 
                         value={editingQuestion.explanation} 
                         onChange={newText => setEditingQuestion({...editingQuestion, explanation: newText})}
@@ -1043,62 +1349,100 @@ export default function App() {
           <nav className="nav">
             <div className="nav-brand"><Calculator color="#2563eb" size={24} /> Olyst Student</div>
             <div className="flex items-center gap-4">
-              <span className="badge hidden-sm"><User size={16} /> {userProfile?.name}</span>
+              <span className="badge hidden-sm"><User size={16} /> {activeSession?.name}</span>
+              <button onClick={() => { setAuthError(''); setAuthSuccess(''); setHomeView('change_password'); }} className="btn" style={{ padding: '0.5rem 1rem', background: 'rgba(37,99,235,0.1)', color: '#2563eb' }}>
+                <Key size={16} /> <span className="hidden-sm">Password</span>
+              </button>
               <button onClick={handleLogout} className="btn btn-outline" style={{ padding: '0.5rem 1rem' }}><LogOut size={16} /> <span className="hidden-sm">Logout</span></button>
             </div>
           </nav>
           <div className="container">
-            <div className="mb-8">
-              <h2 className="title flex items-center gap-3 mb-6"><BookOpen size={28} color="#2563eb" /> Available Assessments</h2>
-              {exams.length === 0 ? (
-                <div className="empty-state">No exams are currently available. Please check back later.</div>
-              ) : (
-                <div className="grid grid-cols-3">
-                  {exams.map(exam => {
-                    const qCount = allQuestions.filter(q => q.examId === exam.id).length;
-                    return (
-                      <div key={exam.id} className="exam-card">
-                        <h3 className="subtitle" style={{ marginBottom: '0.5rem' }}>{exam.title}</h3>
-                        <p className="text-muted line-clamp-3" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
-                        <div className="exam-meta">
-                          <div className="flex items-center gap-2"><LayoutGrid size={14} color="#3b82f6"/> {qCount} Questions</div>
-                          <div className="flex items-center gap-2"><Clock size={14} color="#3b82f6"/> {exam.timeLimit} Min</div>
-                        </div>
-                        <button onClick={() => selectExamForTaking(exam)} className="btn btn-outline w-full" style={{ borderColor: '#bfdbfe', color: '#1d4ed8' }}>Select Exam <ChevronRight size={16}/></button>
-                      </div>
-                    );
-                  })}
+            {homeView === 'change_password' ? (
+              <div className="card container-sm" style={{ padding: 0, overflow: 'hidden', margin: '0 auto' }}>
+                <div className="nav">
+                  <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Key size={20} color="#2563eb" /> Update Password
+                  </h2>
+                  <button onClick={() => setHomeView('dashboard')} className="btn-icon"><X size={24} /></button>
                 </div>
-              )}
-            </div>
-            
-            <div className="card">
-              <h2 className="title flex items-center gap-3 mb-6"><History size={28} color="#2563eb" /> Your Exam History</h2>
-              {pastResults.length === 0 ? (
-                <div className="empty-state" style={{ padding: '2rem' }}>
-                  <Award size={32} className="text-muted" style={{ margin: '0 auto 0.5rem auto', opacity: 0.5 }} />
-                  <p>You haven't taken any exams yet.</p>
-                </div>
-              ) : (
-                <div>
-                  {pastResults.map(result => (
-                    <div key={result.id} className="history-item">
-                      <div className="flex items-center gap-4">
-                        <div className="history-icon"><Calendar size={20} /></div>
-                        <div>
-                          <p className="font-bold">{result.examTitle || 'Practice Exam'}</p>
-                          <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Taken on {new Date(result.timestamp).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                      <div className="text-right card" style={{ padding: '0.75rem 1rem', minWidth: '100px' }}>
-                        <p className={`font-bold text-2xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage}%</p>
-                        <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{result.score} / {result.total}</p>
-                      </div>
+                <form onSubmit={handleChangePassword} style={{ padding: '2rem' }}>
+                  {authError && <div className="error-message mb-4">{authError}</div>}
+                  {authSuccess && <div className="success-message mb-4">{authSuccess}</div>}
+                  <div className="input-group">
+                    <label className="label">New Password</label>
+                    <div className="input-wrapper">
+                      <Lock size={18} className="input-icon" />
+                      <input type="password" required minLength="6" value={passwordForm.newPassword} onChange={e => setPasswordForm({...passwordForm, newPassword: e.target.value})} className="input" placeholder="Enter new password" />
                     </div>
-                  ))}
+                  </div>
+                  <div className="input-group mb-8">
+                    <label className="label">Confirm New Password</label>
+                    <div className="input-wrapper">
+                      <Lock size={18} className="input-icon" />
+                      <input type="password" required minLength="6" value={passwordForm.confirmPassword} onChange={e => setPasswordForm({...passwordForm, confirmPassword: e.target.value})} className="input" placeholder="Confirm new password" />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
+                    <button type="button" onClick={() => setHomeView('dashboard')} className="btn btn-outline">Cancel</button>
+                    <button type="submit" className="btn btn-primary"><Save size={18} /> Update Password</button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <>
+                <div className="mb-8">
+                  <h2 className="title flex items-center gap-3 mb-6"><BookOpen size={28} color="#2563eb" /> Available Assessments</h2>
+                  {exams.length === 0 ? (
+                    <div className="empty-state">No exams are currently available. Please check back later.</div>
+                  ) : (
+                    <div className="grid grid-cols-3">
+                      {exams.map(exam => {
+                        const qCount = allQuestions.filter(q => q.examId === exam.id).length;
+                        return (
+                          <div key={exam.id} className="exam-card">
+                            <h3 className="subtitle" style={{ marginBottom: '0.5rem' }}>{exam.title}</h3>
+                            <p className="text-muted line-clamp-3" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
+                            <div className="exam-meta">
+                              <div className="flex items-center gap-2"><LayoutGrid size={14} color="#3b82f6"/> {qCount} Questions</div>
+                              <div className="flex items-center gap-2"><Clock size={14} color="#3b82f6"/> {exam.timeLimit} Min</div>
+                            </div>
+                            <button onClick={() => selectExamForTaking(exam)} className="btn btn-outline w-full" style={{ borderColor: '#bfdbfe', color: '#1d4ed8' }}>Select Exam <ChevronRight size={16}/></button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+                
+                <div className="card">
+                  <h2 className="title flex items-center gap-3 mb-6"><History size={28} color="#2563eb" /> Your Exam History</h2>
+                  {pastResults.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '2rem' }}>
+                      <Award size={32} className="text-muted" style={{ margin: '0 auto 0.5rem auto', opacity: 0.5 }} />
+                      <p>You haven't taken any exams yet.</p>
+                    </div>
+                  ) : (
+                    <div>
+                      {pastResults.map(result => (
+                        <div key={result.id} className="history-item">
+                          <div className="flex items-center gap-4">
+                            <div className="history-icon"><Calendar size={20} /></div>
+                            <div>
+                              <p className="font-bold">{result.examTitle || 'Practice Exam'}</p>
+                              <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Taken on {new Date(result.timestamp).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <div className="text-right card" style={{ padding: '0.75rem 1rem', minWidth: '100px' }}>
+                            <p className={`font-bold text-2xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage}%</p>
+                            <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{result.score} / {result.total}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       );
