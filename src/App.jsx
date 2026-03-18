@@ -1,9 +1,11 @@
+// Version: 2.0.0
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Clock, ChevronLeft, ChevronRight, Check, X, AlertTriangle, Calculator, 
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
   Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText, Shield, Key,
-  Download, Upload, Image as ImageIcon
+  Download, Upload, Image as ImageIcon, BarChart, Eye
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -384,6 +386,7 @@ export default function App() {
   const [homeView, setHomeView] = useState('dashboard');
   const [editingExamDetails, setEditingExamDetails] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
+  const [selectedStudentResult, setSelectedStudentResult] = useState(null);
   const [isUploadingCSV, setIsUploadingCSV] = useState(false);
 
   useEffect(() => {
@@ -1156,6 +1159,7 @@ export default function App() {
                           <div className="flex justify-between items-center mb-2">
                             <h3 className="subtitle" style={{ margin: 0 }}>{exam.title}</h3>
                             <div className="flex gap-2">
+                              <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
                               <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><Edit2 size={16} /></button>
                               <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><Trash2 size={16} /></button>
                             </div>
@@ -1171,6 +1175,139 @@ export default function App() {
                     })}
                   </div>
                 )}
+              </>
+            )}
+
+            {adminView === 'analytics' && selectedExam && (
+              <>
+                <button onClick={() => { setSelectedExam(null); setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Exams</button>
+                <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
+                  <div>
+                    <h1 className="title">Class Analytics</h1>
+                    <p className="text-muted">Viewing results for <strong>{selectedExam.title}</strong></p>
+                  </div>
+                </div>
+
+                {(() => {
+                  const examResults = (Array.isArray(allResults) ? allResults : []).filter(r => r.examId === selectedExam.id);
+                  const avgScore = examResults.length ? Math.round(examResults.reduce((acc, r) => acc + (r.percentage || 0), 0) / examResults.length) : 0;
+                  
+                  return (
+                    <>
+                      <div className="grid grid-cols-2 mb-6">
+                        <div className="card text-center" style={{ padding: '1.5rem' }}>
+                          <div className="text-muted font-bold mb-2">AVERAGE SCORE</div>
+                          <div className={`text-4xl font-bold ${avgScore >= 80 ? 'text-success' : avgScore >= 50 ? 'text-warning' : 'text-danger'}`}>{avgScore}%</div>
+                        </div>
+                        <div className="card text-center" style={{ padding: '1.5rem' }}>
+                          <div className="text-muted font-bold mb-2">TOTAL SUBMISSIONS</div>
+                          <div className="text-4xl font-bold text-primary">{examResults.length}</div>
+                        </div>
+                      </div>
+
+                      {examResults.length === 0 ? (
+                        <div className="empty-state">No students have taken this exam yet.</div>
+                      ) : (
+                        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                          <div className="card-header" style={{ margin: 0, borderRadius: 0, padding: '1rem 1.5rem', textAlign: 'left' }}>
+                            <h3 className="subtitle" style={{ margin: 0 }}>Student Submissions</h3>
+                          </div>
+                          <div>
+                            {examResults.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map((result, idx) => (
+                              <div key={idx} className="admin-list-item items-center justify-between">
+                                <div>
+                                  <div className="font-bold">{result.studentName || 'Unknown Student'}</div>
+                                  <div className="text-muted" style={{ fontSize: '0.875rem' }}>Taken {new Date(result.timestamp || Date.now()).toLocaleString()}</div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <div className="text-right">
+                                    <div className={`font-bold text-xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage || 0}%</div>
+                                    <div className="text-muted" style={{ fontSize: '0.75rem' }}>{result.score || 0} / {result.total || 0} pts</div>
+                                  </div>
+                                  <button onClick={() => { setSelectedStudentResult(result); setAdminView('student_review'); }} className="btn btn-outline" style={{ padding: '0.5rem 1rem' }}>
+                                    <Eye size={16} /> <span className="hidden-sm">Review</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </>
+            )}
+
+            {adminView === 'student_review' && selectedStudentResult && (
+              <>
+                <button onClick={() => { setSelectedStudentResult(null); setAdminView('analytics'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Analytics</button>
+                <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
+                  <div>
+                    <h1 className="title">Review: {selectedStudentResult.studentName}</h1>
+                    <p className="text-muted">Viewing responses for <strong>{selectedExam.title}</strong></p>
+                  </div>
+                  <div className="text-right">
+                    <div className={`font-bold text-3xl ${selectedStudentResult.percentage >= 80 ? 'text-success' : selectedStudentResult.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{selectedStudentResult.percentage || 0}%</div>
+                    <div className="text-muted font-bold" style={{ fontSize: '0.875rem' }}>{selectedStudentResult.score || 0} / {selectedStudentResult.total || 0} correct</div>
+                  </div>
+                </div>
+
+                {!selectedStudentResult.answers && (
+                  <div className="error-message mb-6" style={{ background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' }}>
+                    <AlertIcon size={20} style={{ display: 'inline-block', marginBottom: '-4px', marginRight: '8px' }} />
+                    Detailed response data is not available for this submission (taken before the tracking update).
+                  </div>
+                )}
+
+                <div>
+                  {getExamQuestionsFromDB().map((q, idx) => {
+                    const userAnswer = selectedStudentResult.answers ? selectedStudentResult.answers[q.id] : undefined;
+                    const isCorrect = userAnswer === q.correctId;
+                    const isSkipped = userAnswer === undefined;
+                    
+                    return (
+                      <div key={q.id || idx} className="review-item">
+                        <div className={`review-header ${isCorrect ? 'correct' : isSkipped ? '' : 'incorrect'}`}>
+                          <div className={`review-icon ${isCorrect ? 'bg-success' : isSkipped ? 'bg-muted' : 'bg-danger'}`}>
+                            {isCorrect ? <Check size={16} /> : isSkipped ? <span style={{ fontSize: '1rem' }}>-</span> : <X size={16} />}
+                          </div>
+                          Question {idx + 1}: {isCorrect ? 'Correct' : isSkipped ? 'Skipped' : 'Incorrect'}
+                        </div>
+                        <div className="review-body">
+                          <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q?.topic || ''}</div>
+                          <p className="subtitle mb-4"><LatexText text={q?.text || ''} /></p>
+                          
+                          {q?.imageUrl && (
+                            <img src={q.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginBottom: '1.5rem', objectFit: 'contain', border: '1px solid #e2e8f0' }} />
+                          )}
+
+                          <div className="grid grid-cols-2 mb-6">
+                            {(Array.isArray(q?.options) ? q.options : []).map((opt, oIdx) => {
+                              const isThisUserChoice = userAnswer === opt?.id;
+                              const isThisCorrectChoice = q.correctId === opt?.id;
+                              return (
+                                <div key={opt?.id || oIdx} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
+                                  <div className="font-bold shrink-0">{opt?.id || '?'}.</div>
+                                  <div className="flex-1"><LatexText text={opt?.text || ''} /></div>
+                                  {isThisCorrectChoice && <Check size={18} className="shrink-0" />}
+                                  {isThisUserChoice && !isCorrect && <X size={18} className="shrink-0" />}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="review-explanation">
+                            <strong style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>Explanation</strong>
+                            <LatexText text={q?.explanation || 'No explanation provided.'} />
+                            {q?.explanationImageUrl && (
+                              <img src={q.explanationImageUrl} alt="Explanation Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginTop: '1rem', objectFit: 'contain', border: '1px solid #bfdbfe' }} />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </>
             )}
 
