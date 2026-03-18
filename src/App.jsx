@@ -1,11 +1,11 @@
-// Version: 2.0.0
+// Version: 2.0.4
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Clock, ChevronLeft, ChevronRight, Check, X, AlertTriangle, Calculator, 
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
   Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText, Shield, Key,
-  Download, Upload, Image as ImageIcon, BarChart, Eye
+  Download, Upload, Image as ImageIcon, BarChart, Eye, Copy, Database, Search, Tag
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -56,7 +56,6 @@ const LatexText = ({ text }) => {
     }
   }, [text, isLoaded]);
 
-  // Self-closing span prevents React from conflicting with our innerHTML DOM mutations
   return <span ref={containerRef} />;
 };
 
@@ -131,6 +130,10 @@ const hashPassword = async (password) => {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 };
 
+// --- CLOUDINARY CONFIGURATION ---
+const CLOUDINARY_CLOUD_NAME = "dm8nurvba"; 
+const CLOUDINARY_UPLOAD_PRESET = "ExamBuilder"; 
+
 // --- FIREBASE INITIALIZATION ---
 const firebaseConfig = {
   apiKey: "AIzaSyAW3I1jRHHzkLHRVQ_BU6wsZfnpphqPNOs",
@@ -188,7 +191,7 @@ const styles = `
   .gap-4 { gap: 1rem; }
   .gap-6 { gap: 1.5rem; }
   .shrink-0 { flex-shrink: 0; }
-  .flex-1 { flex: 1; }
+  .flex-1 { flex: 1; min-width: 0; }
   
   .container { width: 100%; max-width: 64rem; margin: 0 auto; padding: 2rem; }
   .container-sm { max-width: 28rem; }
@@ -268,7 +271,7 @@ const styles = `
   .option-btn:hover { border-color: #bfdbfe; background: #f8fafc; }
   .option-btn.selected { border-color: #2563eb; background: #eff6ff; }
   .option-btn:disabled { cursor: default; }
-  .option-letter { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border: 2px solid #cbd5e1; border-radius: 0.5rem; margin-right: 1rem; font-weight: 700; background: #f1f5f9; color: #64748b; }
+  .option-letter { width: 2.5rem; height: 2.5rem; display: flex; align-items: center; justify-content: center; border: 2px solid #cbd5e1; border-radius: 0.5rem; margin-right: 1rem; font-weight: 700; background: #f1f5f9; color: #64748b; flex-shrink: 0; }
   .option-btn.selected .option-letter { background: #2563eb; color: white; border-color: #2563eb; }
   
   .timer { font-family: monospace; font-size: 1.125rem; font-weight: 700; padding: 0.375rem 1rem; border-radius: 0.5rem; border: 1px solid #e2e8f0; background: #f8fafc; display: flex; align-items: center; gap: 0.5rem; color: #334155; }
@@ -318,6 +321,11 @@ const styles = `
   
   .empty-state { border: 2px dashed #cbd5e1; padding: 3rem; text-align: center; border-radius: 1rem; background: white; }
   
+  .math-scroll { overflow-x: auto; overflow-y: hidden; overflow-wrap: break-word; word-break: break-word; max-width: 100%; padding-bottom: 4px; }
+  .math-scroll::-webkit-scrollbar { height: 4px; }
+  .math-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 2px; }
+  .math-scroll::-webkit-scrollbar-track { background: transparent; }
+
   .error-message { background: #fef2f2; color: #ef4444; border: 1px solid #fca5a5; padding: 1rem; border-radius: 0.75rem; font-weight: 600; text-align: center; font-size: 0.875rem; }
   .success-message { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 1rem; border-radius: 0.75rem; font-weight: 600; text-align: center; font-size: 0.875rem; }
 
@@ -334,7 +342,6 @@ const styles = `
 export default function App() {
   const [appState, setAppState] = useState('loading'); 
   
-  // Persistent active session handled locally for multi-device sync
   const [activeSession, setActiveSession] = useState(() => {
     const saved = localStorage.getItem('olyst_session');
     try {
@@ -345,14 +352,14 @@ export default function App() {
     }
   });
 
-  const [user, setUser] = useState(null); // Keep for Firebase backend auth
+  const [user, setUser] = useState(null);
 
   // Login Form
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
-  const [loginMode, setLoginMode] = useState('student'); // 'student', 'teacher', or 'admin'
+  const [loginMode, setLoginMode] = useState('student');
   const [isRegistering, setIsRegistering] = useState(false); 
 
   // SuperAdmin state
@@ -368,6 +375,7 @@ export default function App() {
   const [exams, setExams] = useState([]);
   const [allQuestions, setAllQuestions] = useState([]);
   const [allResults, setAllResults] = useState([]); 
+  const [topicsList, setTopicsList] = useState([]); // NEW: Tracks predefined topics
   
   const [pastResults, setPastResults] = useState([]);
   const [selectedExam, setSelectedExam] = useState(null);
@@ -385,9 +393,21 @@ export default function App() {
   const [adminView, setAdminView] = useState('list_exams'); 
   const [homeView, setHomeView] = useState('dashboard');
   const [editingExamDetails, setEditingExamDetails] = useState(null);
+  
+  // Question & Upload States
   const [editingQuestion, setEditingQuestion] = useState(null);
-  const [selectedStudentResult, setSelectedStudentResult] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
+  const [explanationImageFile, setExplanationImageFile] = useState(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isUploadingCSV, setIsUploadingCSV] = useState(false);
+  
+  const [selectedStudentResult, setSelectedStudentResult] = useState(null);
+  
+  // Question Bank States
+  const [bankSelection, setBankSelection] = useState([]); 
+  const [bankSearchQuery, setBankSearchQuery] = useState('');
+  const [bankTopicFilter, setBankTopicFilter] = useState(''); // NEW: Topic filter
+  const [newTopicName, setNewTopicName] = useState('');
 
   useEffect(() => {
     const initAuth = async () => {
@@ -432,8 +452,14 @@ export default function App() {
     const unsubAllResults = onSnapshot(collection(db, `${publicDataPath}/allResults`), (snapshot) => {
       setAllResults(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     });
+    
+    const unsubTopics = onSnapshot(collection(db, `${publicDataPath}/topics`), (snapshot) => {
+      const loadedTopics = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      loadedTopics.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setTopicsList(loadedTopics);
+    });
 
-    return () => { unsubAdmins(); unsubTeachers(); unsubStudents(); unsubExams(); unsubQuestions(); unsubAllResults(); };
+    return () => { unsubAdmins(); unsubTeachers(); unsubStudents(); unsubExams(); unsubQuestions(); unsubAllResults(); unsubTopics(); };
   }, []);
 
   // 2. Routing based on Active Session
@@ -779,12 +805,51 @@ export default function App() {
     }
   };
 
+  const duplicateExam = async (examToCopy) => {
+    if (!activeSession || !window.confirm(`Are you sure you want to duplicate "${examToCopy.title}"?`)) return;
+    try {
+      const examsRef = collection(db, `artifacts/${appId}/public/data/exams`);
+      const newExamRef = await addDoc(examsRef, {
+        title: `${examToCopy.title} (Copy)`,
+        description: examToCopy.description,
+        timeLimit: examToCopy.timeLimit,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        isActive: false // Default to draft so they can edit it first before publishing
+      });
+
+      const qsToCopy = allQuestions.filter(q => q.examId === examToCopy.id);
+      const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
+      for (const q of qsToCopy) {
+        const { id, ...qData } = q;
+        await addDoc(questionsRef, {
+          ...qData,
+          examId: newExamRef.id,
+          order: Date.now() + Math.random()
+        });
+      }
+      setAuthSuccess(`Exam "${examToCopy.title}" duplicated successfully!`);
+      setTimeout(() => setAuthSuccess(''), 3000);
+    } catch (err) {
+      console.error("Error duplicating exam:", err);
+      setAuthError("Failed to duplicate exam.");
+      setTimeout(() => setAuthError(''), 3000);
+    }
+  };
+
   const openNewQuestion = () => {
     setEditingQuestion({
-      isNew: true, topic: '', text: '',
+      isNew: true, 
+      topic: topicsList.length > 0 ? topicsList[0].name : '', 
+      text: '',
       options: [ { id: 'A', text: '' }, { id: 'B', text: '' }, { id: 'C', text: '' }, { id: 'D', text: '' } ],
-      correctId: 'A', explanation: ''
+      correctId: 'A', 
+      explanation: '',
+      imageUrl: '', 
+      explanationImageUrl: ''
     });
+    setImageFile(null);
+    setExplanationImageFile(null);
     setAdminView('edit_question');
   };
 
@@ -792,24 +857,74 @@ export default function App() {
     e.preventDefault();
     if (!activeSession || !selectedExam) return;
     
-    const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
-    const qData = {
-      examId: selectedExam.id, topic: editingQuestion.topic, text: editingQuestion.text,
-      options: editingQuestion.options, correctId: editingQuestion.correctId,
-      explanation: editingQuestion.explanation, order: editingQuestion.order || Date.now()
-    };
+    setIsUploadingImage(true);
+    setAuthError('');
+    let uploadedImageUrl = editingQuestion.imageUrl || '';
+    let uploadedExplanationImageUrl = editingQuestion.explanationImageUrl || '';
 
     try {
+      // Cloudinary upload for main question image
+      if (imageFile) {
+        const formData = new FormData();
+        formData.append('file', imageFile);
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!uploadRes.ok) throw new Error("Failed to upload question image.");
+        const uploadData = await uploadRes.json();
+        uploadedImageUrl = uploadData.secure_url;
+      }
+
+      // Cloudinary upload for explanation image
+      if (explanationImageFile) {
+        const explanationFormData = new FormData();
+        explanationFormData.append('file', explanationImageFile);
+        explanationFormData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+        const explanationUploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+          method: 'POST',
+          body: explanationFormData
+        });
+        
+        if (!explanationUploadRes.ok) throw new Error("Failed to upload explanation image.");
+        const explanationUploadData = await explanationUploadRes.json();
+        uploadedExplanationImageUrl = explanationUploadData.secure_url;
+      }
+
+      const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
+      const qData = {
+        examId: selectedExam.id, 
+        topic: editingQuestion.topic, 
+        text: editingQuestion.text,
+        options: editingQuestion.options, 
+        correctId: editingQuestion.correctId,
+        explanation: editingQuestion.explanation, 
+        order: editingQuestion.order || Date.now(),
+        imageUrl: uploadedImageUrl,
+        explanationImageUrl: uploadedExplanationImageUrl
+      };
+
       if (editingQuestion.isNew) {
         await addDoc(questionsRef, qData);
       } else {
         const docRef = doc(db, `artifacts/${appId}/public/data/questions/${editingQuestion.id}`);
         await updateDoc(docRef, qData);
       }
+      
       setEditingQuestion(null);
+      setImageFile(null);
+      setExplanationImageFile(null);
       setAdminView('manage_questions');
     } catch (err) {
       console.error("Error saving question:", err);
+      setAuthError(err.message || "Failed to save question.");
+      setTimeout(() => setAuthError(''), 6000);
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -822,9 +937,7 @@ export default function App() {
     }
   };
 
-  // --- CSV UPLOAD/DOWNLOAD HANDLERS ---
   const handleDownloadTemplate = () => {
-    // Template formatted perfectly to show how to use $LaTeX$ inside the CSV
     const csvContent = `Topic,Question Text,Option A,Option B,Option C,Option D,Correct Answer (A/B/C/D),Explanation\nAlgebra I,Solve for $x$: $2x + 4 = 10$,2,3,4,5,B,Subtract 4 from both sides to get $2x = 6$. Divide by 2 to get $x = 3$.\nGeometry,What is the area of a rectangle with length 5 and width 4?,9,18,20,40,C,The area of a rectangle is length multiplied by width ($5 \\times 4 = 20$).\nFractions,"What is $\\frac{1}{2} + \\frac{1}{4}$?","$\\frac{1}{4}$","$\\frac{3}{4}$","$\\frac{2}{6}$","1",B,"To add fractions find a common denominator. $\\frac{1}{2}$ becomes $\\frac{2}{4}$. $\\frac{2}{4} + \\frac{1}{4} = \\frac{3}{4}$."`;
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
@@ -901,6 +1014,37 @@ export default function App() {
       }
     };
     reader.readAsText(file);
+  };
+
+  const importFromBank = async () => {
+    if (!activeSession || !selectedExam || bankSelection.length === 0) return;
+    setIsUploadingCSV(true); 
+    try {
+      const questionsRef = collection(db, `artifacts/${appId}/public/data/questions`);
+      for (const qId of bankSelection) {
+        const originalQ = allQuestions.find(q => q.id === qId);
+        if (originalQ) {
+          const { id, ...qData } = originalQ;
+          await addDoc(questionsRef, {
+            ...qData,
+            examId: selectedExam.id,
+            order: Date.now() + Math.random()
+          });
+        }
+      }
+      setAuthSuccess(`Successfully imported ${bankSelection.length} questions from the bank!`);
+      setTimeout(() => setAuthSuccess(''), 4000);
+      setAdminView('manage_questions');
+      setBankSelection([]);
+      setBankSearchQuery('');
+      setBankTopicFilter('');
+    } catch (err) {
+      console.error("Error importing from bank:", err);
+      setAuthError("Failed to import questions.");
+      setTimeout(() => setAuthError(''), 4000);
+    } finally {
+      setIsUploadingCSV(false);
+    }
   };
 
   // --- VIEWS ---
@@ -1140,6 +1284,9 @@ export default function App() {
                     {exams.length === 0 && (
                       <button onClick={seedDemoExam} className="btn btn-outline flex-1"><BookOpen size={18} /> Load Demo</button>
                     )}
+                    <button onClick={() => setAdminView('manage_topics')} className="btn btn-outline flex-1">
+                      <Tag size={18} /> Manage Topics
+                    </button>
                     <button onClick={openNewExam} className="btn btn-primary flex-1"><Plus size={18} /> Create Exam</button>
                   </div>
                 </div>
@@ -1157,11 +1304,12 @@ export default function App() {
                       return (
                         <div key={exam.id} className="exam-card">
                           <div className="flex justify-between items-center mb-2">
-                            <h3 className="subtitle" style={{ margin: 0 }}>{exam.title}</h3>
-                            <div className="flex gap-2">
+                            <h3 className="subtitle" style={{ margin: 0, wordBreak: 'break-word' }}>{exam.title}</h3>
+                            <div className="flex gap-2 shrink-0">
                               <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
-                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon"><Edit2 size={16} /></button>
-                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger"><Trash2 size={16} /></button>
+                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon" title="Edit Exam Details"><Edit2 size={16} /></button>
+                              <button onClick={() => duplicateExam(exam)} className="btn-icon" title="Duplicate Exam"><Copy size={16} /></button>
+                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger" title="Delete Exam"><Trash2 size={16} /></button>
                             </div>
                           </div>
                           <p className="text-muted line-clamp-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
@@ -1176,6 +1324,47 @@ export default function App() {
                   </div>
                 )}
               </>
+            )}
+
+            {adminView === 'manage_topics' && (
+              <div className="container-sm mx-auto" style={{ margin: '0 auto' }}>
+                 <button onClick={() => { setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Dashboard</button>
+                 <div className="mb-6">
+                   <h1 className="title">Manage Topics</h1>
+                   <p className="text-muted">Predefine categories for organizing your questions.</p>
+                 </div>
+                 <div className="card mb-6">
+                   <form onSubmit={async (e) => {
+                     e.preventDefault();
+                     if(!newTopicName.trim()) return;
+                     try {
+                       await addDoc(collection(db, `artifacts/${appId}/public/data/topics`), { name: newTopicName.trim() });
+                       setNewTopicName('');
+                     } catch(err) { console.error(err); }
+                   }} className="flex gap-4">
+                     <div className="input-group flex-1 mb-0">
+                       <input type="text" value={newTopicName} onChange={e=>setNewTopicName(e.target.value)} className="input no-icon" placeholder="New Topic (e.g. Algebra I)" />
+                     </div>
+                     <button type="submit" className="btn btn-primary" style={{ padding: '0.75rem 1rem' }}><Plus size={18} /> Add</button>
+                   </form>
+                 </div>
+                 <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                    {topicsList.length === 0 ? (
+                      <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No topics have been created yet.</div>
+                    ) : (
+                      topicsList.map(topic => (
+                        <div key={topic.id} className="admin-list-item flex justify-between items-center">
+                          <span className="font-bold">{topic.name}</span>
+                          <button onClick={async () => {
+                            if(window.confirm(`Delete topic "${topic.name}"?`)) {
+                              await deleteDoc(doc(db, `artifacts/${appId}/public/data/topics/${topic.id}`));
+                            }
+                          }} className="btn-icon btn-icon-danger"><Trash2 size={18} /></button>
+                        </div>
+                      ))
+                    )}
+                 </div>
+              </div>
             )}
 
             {adminView === 'analytics' && selectedExam && (
@@ -1255,8 +1444,8 @@ export default function App() {
 
                 {!selectedStudentResult.answers && (
                   <div className="error-message mb-6" style={{ background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' }}>
-                    <AlertIcon size={20} style={{ display: 'inline-block', marginBottom: '-4px', marginRight: '8px' }} />
-                    Detailed response data is not available for this submission (taken before the tracking update).
+                    <AlertTriangle size={20} style={{ display: 'inline-block', marginBottom: '-4px', marginRight: '8px' }} />
+                    Detailed response data is not available for this submission.
                   </div>
                 )}
 
@@ -1276,7 +1465,7 @@ export default function App() {
                         </div>
                         <div className="review-body">
                           <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q?.topic || ''}</div>
-                          <p className="subtitle mb-4"><LatexText text={q?.text || ''} /></p>
+                          <div className="subtitle mb-4 math-scroll"><LatexText text={q?.text || ''} /></div>
                           
                           {q?.imageUrl && (
                             <img src={q.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginBottom: '1.5rem', objectFit: 'contain', border: '1px solid #e2e8f0' }} />
@@ -1289,7 +1478,7 @@ export default function App() {
                               return (
                                 <div key={opt?.id || oIdx} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
                                   <div className="font-bold shrink-0">{opt?.id || '?'}.</div>
-                                  <div className="flex-1"><LatexText text={opt?.text || ''} /></div>
+                                  <div className="flex-1 math-scroll"><LatexText text={opt?.text || ''} /></div>
                                   {isThisCorrectChoice && <Check size={18} className="shrink-0" />}
                                   {isThisUserChoice && !isCorrect && <X size={18} className="shrink-0" />}
                                 </div>
@@ -1298,7 +1487,7 @@ export default function App() {
                           </div>
                           <div className="review-explanation">
                             <strong style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>Explanation</strong>
-                            <LatexText text={q?.explanation || 'No explanation provided.'} />
+                            <div className="math-scroll"><LatexText text={q?.explanation || 'No explanation provided.'} /></div>
                             {q?.explanationImageUrl && (
                               <img src={q.explanationImageUrl} alt="Explanation Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginTop: '1rem', objectFit: 'contain', border: '1px solid #bfdbfe' }} />
                             )}
@@ -1362,6 +1551,9 @@ export default function App() {
                     <label htmlFor="csv-upload" className={`btn btn-outline flex-1 ${isUploadingCSV ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`} style={{ margin: 0, justifyContent: 'center', whiteSpace: 'nowrap' }}>
                       <Upload size={18} /> <span className="hidden-sm">{isUploadingCSV ? 'Uploading...' : 'Import CSV'}</span>
                     </label>
+                    <button onClick={() => { setBankSelection([]); setBankSearchQuery(''); setBankTopicFilter(''); setAdminView('question_bank'); }} className="btn btn-outline flex-1" style={{ whiteSpace: 'nowrap' }}>
+                      <Database size={18} /> <span className="hidden-sm">Question Bank</span>
+                    </button>
                     <button onClick={openNewQuestion} className="btn btn-primary flex-1" style={{ whiteSpace: 'nowrap' }}>
                       <Plus size={18} /> <span className="hidden-sm">Add Question</span>
                     </button>
@@ -1382,21 +1574,23 @@ export default function App() {
                   <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                     {currentQuestions.map((q, idx) => (
                       <div key={q.id} className="admin-list-item flex-col-sm">
-                        <div className="flex gap-4 flex-1 w-full-sm">
+                        <div className="flex gap-4 flex-1 w-full-sm" style={{ minWidth: 0 }}>
                           <div className="item-number">{idx + 1}</div>
-                          <div className="flex-1">
+                          <div className="flex-1" style={{ minWidth: 0 }}>
                             <div className="text-muted font-bold mb-2" style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>{q.topic}</div>
-                            <p style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '1rem' }}><LatexText text={q.text} /></p>
+                            <div className="math-scroll" style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '1rem' }}><LatexText text={q.text} /></div>
+                            {q?.imageUrl && <div className="mb-2 text-sm font-bold text-primary flex items-center gap-2"><ImageIcon size={16} /> Attached Question Image</div>}
+                            {q?.explanationImageUrl && <div className="mb-4 text-sm font-bold text-primary flex items-center gap-2"><ImageIcon size={16} /> Attached Explanation Image</div>}
                             <div className="grid grid-cols-2 gap-2" style={{ fontSize: '0.875rem' }}>
                               {q.options.map(opt => (
-                                <div key={opt.id} style={{ padding: '0.5rem', border: '1px solid', borderColor: q.correctId === opt.id ? '#bbf7d0' : '#e2e8f0', backgroundColor: q.correctId === opt.id ? '#f0fdf4' : 'white', borderRadius: '0.5rem', color: q.correctId === opt.id ? '#166534' : '#475569' }}>
+                                <div key={opt.id} className="math-scroll" style={{ padding: '0.5rem', border: '1px solid', borderColor: q.correctId === opt.id ? '#bbf7d0' : '#e2e8f0', backgroundColor: q.correctId === opt.id ? '#f0fdf4' : 'white', borderRadius: '0.5rem', color: q.correctId === opt.id ? '#166534' : '#475569' }}>
                                   <strong>{opt.id}.</strong> <LatexText text={opt.text} />
                                 </div>
                               ))}
                             </div>
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 shrink-0">
                           <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><Edit2 size={20} /></button>
                           <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><Trash2 size={20} /></button>
                         </div>
@@ -1404,6 +1598,95 @@ export default function App() {
                     ))}
                   </div>
                 )}
+              </>
+            )}
+
+            {adminView === 'question_bank' && selectedExam && (
+              <>
+                <button onClick={() => { setAdminView('manage_questions'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Questions</button>
+                <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
+                  <div>
+                    <h1 className="title">Global Question Bank</h1>
+                    <p className="text-muted">Select questions from other exams to copy into <strong>{selectedExam.title}</strong>.</p>
+                  </div>
+                  <button 
+                    onClick={importFromBank} 
+                    disabled={bankSelection.length === 0 || isUploadingCSV} 
+                    className="btn btn-primary w-full-sm"
+                  >
+                    <Plus size={18} /> {isUploadingCSV ? 'Importing...' : `Add ${bankSelection.length} Selected`}
+                  </button>
+                </div>
+
+                {/* --- NEW SEARCH BAR AND FILTER --- */}
+                <div className="flex gap-4 mb-6 flex-col-sm">
+                  <div className="input-group flex-1 mb-0">
+                    <div className="input-wrapper">
+                      <Search size={18} className="input-icon" />
+                      <input 
+                        type="text" 
+                        value={bankSearchQuery} 
+                        onChange={e => setBankSearchQuery(e.target.value)} 
+                        className="input" 
+                        placeholder="Search text..." 
+                      />
+                    </div>
+                  </div>
+                  <div className="input-group mb-0 w-full-sm" style={{ width: '250px' }}>
+                    <select value={bankTopicFilter} onChange={e => setBankTopicFilter(e.target.value)} className="input no-icon">
+                       <option value="">All Topics</option>
+                       {topicsList.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {authError && <div className="error-message mb-4">{authError}</div>}
+
+                {allQuestions.length === 0 ? (
+                   <div className="empty-state">The global question bank is currently empty.</div>
+                ) : (() => {
+                  const filteredBankQuestions = allQuestions.filter(q => {
+                    if (q.examId === selectedExam.id) return false;
+                    if (bankTopicFilter && q.topic !== bankTopicFilter) return false;
+                    const searchLower = bankSearchQuery.toLowerCase();
+                    return (q.topic || '').toLowerCase().includes(searchLower) || 
+                           (q.text || '').toLowerCase().includes(searchLower);
+                  });
+
+                  return (
+                    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                      {allQuestions.filter(q => q.examId !== selectedExam.id).length === 0 ? (
+                         <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>All existing questions in the database are already in this exam!</div>
+                      ) : filteredBankQuestions.length === 0 ? (
+                         <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No questions match your search.</div>
+                      ) : (
+                        filteredBankQuestions.map((q) => {
+                          const isSelected = bankSelection.includes(q.id);
+                          const sourceExam = exams.find(e => e.id === q.examId);
+                          
+                          return (
+                            <div key={q.id} className="admin-list-item flex-col-sm" style={{ backgroundColor: isSelected ? '#eff6ff' : 'transparent', transition: '0.2s', cursor: 'pointer' }} onClick={() => {
+                              if (isSelected) setBankSelection(bankSelection.filter(id => id !== q.id));
+                              else setBankSelection([...bankSelection, q.id]);
+                            }}>
+                              <div className="flex gap-4 flex-1 w-full-sm items-center" style={{ minWidth: 0 }}>
+                                <div style={{ width: '1.5rem', height: '1.5rem', borderRadius: '0.25rem', border: '2px solid', borderColor: isSelected ? '#2563eb' : '#cbd5e1', backgroundColor: isSelected ? '#2563eb' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  {isSelected && <Check size={14} color="white" />}
+                                </div>
+                                <div className="flex-1" style={{ minWidth: 0 }}>
+                                  <div className="text-muted font-bold mb-1" style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>
+                                    {q.topic} {sourceExam && <span style={{ fontWeight: 'normal', textTransform: 'none', marginLeft: '8px' }}>from: {sourceExam.title}</span>}
+                                  </div>
+                                  <div className="math-scroll" style={{ fontSize: '1rem', fontWeight: 500, margin: 0 }}><LatexText text={q.text} /></div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  );
+                })()}
               </>
             )}
 
@@ -1427,9 +1710,32 @@ export default function App() {
                   <div className="admin-form-grid mb-6">
                     <div className="input-group col-span-2">
                       <label className="label">Topic / Category</label>
-                      <input required type="text" value={editingQuestion.topic} onChange={e => setEditingQuestion({...editingQuestion, topic: e.target.value})} className="input no-icon" placeholder="e.g. Algebra" />
+                      {topicsList.length === 0 ? (
+                         <div style={{ padding: '0.75rem 1rem', background: '#fef2f2', color: '#ef4444', borderRadius: '0.75rem', fontSize: '0.875rem', border: '1px solid #fca5a5' }}>
+                           Please add topics in the 'Manage Topics' section before creating a question.
+                         </div>
+                      ) : (
+                        <select required value={editingQuestion.topic} onChange={e => setEditingQuestion({...editingQuestion, topic: e.target.value})} className="input no-icon">
+                          <option value="" disabled>Select a predefined topic</option>
+                          {topicsList.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                        </select>
+                      )}
                     </div>
                     
+                    {/* RESTORED: QUESTION IMAGE UPLOAD */}
+                    <div className="input-group col-span-2 p-4" style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '0.75rem' }}>
+                      <label className="label mb-2 flex items-center gap-2"><ImageIcon size={16}/> Question Image (Optional)</label>
+                      <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])} className="input no-icon" style={{ background: 'white', padding: '0.5rem' }} />
+                      {editingQuestion.imageUrl && !imageFile && (
+                        <div className="mt-3">
+                           <p className="text-sm flex items-center gap-2" style={{ color: '#2563eb' }}>
+                             <Check size={14} /> Currently has an image attached. Uploading a new one will replace it.
+                           </p>
+                           <button type="button" onClick={() => { setEditingQuestion({...editingQuestion, imageUrl: ''}); setImageFile(null); }} className="btn btn-danger mt-2" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}><Trash2 size={14}/> Remove Existing Image</button>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="input-group col-span-2">
                       <label className="label">Question Text</label>
                       <MathLiveInput 
@@ -1458,9 +1764,23 @@ export default function App() {
                         <option value="A">Option A</option><option value="B">Option B</option><option value="C">Option C</option><option value="D">Option D</option>
                       </select>
                     </div>
+
+                    {/* RESTORED: EXPLANATION IMAGE UPLOAD */}
+                    <div className="input-group col-span-2 p-4" style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '0.75rem' }}>
+                      <label className="label mb-2 flex items-center gap-2"><ImageIcon size={16}/> Explanation Image (Optional)</label>
+                      <input type="file" accept="image/*" onChange={(e) => setExplanationImageFile(e.target.files[0])} className="input no-icon" style={{ background: 'white', padding: '0.5rem' }} />
+                      {editingQuestion.explanationImageUrl && !explanationImageFile && (
+                        <div className="mt-3">
+                           <p className="text-sm flex items-center gap-2" style={{ color: '#2563eb' }}>
+                             <Check size={14} /> Currently has an image attached. Uploading a new one will replace it.
+                           </p>
+                           <button type="button" onClick={() => { setEditingQuestion({...editingQuestion, explanationImageUrl: ''}); setExplanationImageFile(null); }} className="btn btn-danger mt-2" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}><Trash2 size={14}/> Remove Existing Image</button>
+                        </div>
+                      )}
+                    </div>
                     
                     <div className="input-group col-span-2 mb-0">
-                      <label className="label">Explanation (Shown after exam)</label>
+                      <label className="label">Explanation Text (Shown after exam)</label>
                       <MathLiveInput 
                         value={editingQuestion.explanation} 
                         onChange={newText => setEditingQuestion({...editingQuestion, explanation: newText})}
@@ -1469,8 +1789,10 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
-                    <button type="button" onClick={() => { setEditingQuestion(null); setAdminView('manage_questions'); }} className="btn btn-outline">Cancel</button>
-                    <button type="submit" className="btn btn-primary"><Save size={18} /> Save Question</button>
+                    <button type="button" onClick={() => { setEditingQuestion(null); setAdminView('manage_questions'); }} className="btn btn-outline" disabled={isUploadingImage}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" disabled={isUploadingImage || topicsList.length === 0}>
+                      <Save size={18} /> {isUploadingImage ? 'Uploading Images...' : 'Save Question'}
+                    </button>
                   </div>
                 </form>
               </div>
@@ -1630,7 +1952,10 @@ export default function App() {
             </div>
             
             <div className="question-box">
-              <p style={{ fontSize: '1.25rem', fontWeight: 500 }}><LatexText text={currentQuestion.text} /></p>
+              <div className="math-scroll" style={{ fontSize: '1.25rem', fontWeight: 500 }}><LatexText text={currentQuestion.text} /></div>
+              {currentQuestion?.imageUrl && (
+                 <img src={currentQuestion.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '0.5rem', objectFit: 'contain', border: '1px solid #e2e8f0', marginTop: '1rem' }} />
+              )}
             </div>
             
             <div className="mb-8">
@@ -1639,7 +1964,7 @@ export default function App() {
                 return (
                   <button key={option.id} onClick={() => handleSelectOption(option.id)} className={`option-btn ${isSelected ? 'selected' : ''}`}>
                     <div className="option-letter">{option.id}</div>
-                    <span><LatexText text={option.text} /></span>
+                    <div className="flex-1 math-scroll text-left"><LatexText text={option.text} /></div>
                   </button>
                 );
               })}
@@ -1715,7 +2040,12 @@ export default function App() {
                       Question {idx + 1}: {isCorrect ? 'Correct' : isSkipped ? 'Skipped' : 'Incorrect'}
                     </div>
                     <div className="review-body">
-                      <p className="subtitle mb-6"><LatexText text={q.text} /></p>
+                      <div className="subtitle mb-6 math-scroll"><LatexText text={q.text} /></div>
+                      
+                      {q?.imageUrl && (
+                         <img src={q.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginBottom: '1.5rem', objectFit: 'contain', border: '1px solid #e2e8f0' }} />
+                      )}
+
                       <div className="grid grid-cols-2 mb-6">
                         {q.options.map(opt => {
                           const isThisUserChoice = userAnswer === opt.id;
@@ -1723,7 +2053,7 @@ export default function App() {
                           return (
                             <div key={opt.id} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
                               <div className="font-bold shrink-0">{opt.id}.</div>
-                              <div className="flex-1"><LatexText text={opt.text} /></div>
+                              <div className="flex-1 math-scroll"><LatexText text={opt.text} /></div>
                               {isThisCorrectChoice && <Check size={18} className="shrink-0" />}
                               {isThisUserChoice && !isCorrect && <X size={18} className="shrink-0" />}
                             </div>
@@ -1732,7 +2062,10 @@ export default function App() {
                       </div>
                       <div className="review-explanation">
                         <strong style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>Explanation</strong>
-                        <LatexText text={q.explanation} />
+                        <div className="math-scroll"><LatexText text={q.explanation} /></div>
+                        {q?.explanationImageUrl && (
+                          <img src={q.explanationImageUrl} alt="Explanation Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginTop: '1rem', objectFit: 'contain', border: '1px solid #bfdbfe' }} />
+                        )}
                       </div>
                     </div>
                   </div>
