@@ -1,4 +1,4 @@
-// Version: 2.0.4
+// Version: 2.0.6
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -1066,7 +1066,7 @@ export default function App() {
               <div className={`card-header-icon ${loginMode === 'admin' ? 'admin' : ''}`}>
                 {loginMode === 'admin' ? <Shield size={32} /> : <Calculator size={32} />}
               </div>
-              <h1 className="title" style={{ color: 'white' }}>Olyst Platform</h1>
+              <h1 className="title" style={{ color: 'white' }}>Exam Platform</h1>
               <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Interactive Assessment Environment</p>
             </div>
             <div style={{ padding: '2rem' }}>
@@ -1230,7 +1230,7 @@ export default function App() {
       return (
         <div className="min-h-screen">
           <nav className="nav dark">
-            <div className="nav-brand"><Settings size={24} color="#60a5fa" /> <span className="hidden-sm">Olyst Admin Portal</span></div>
+            <div className="nav-brand"><Settings size={24} color="#60a5fa" /> <span className="hidden-sm">Exam Platform Teacher Portal</span></div>
             <div className="flex items-center gap-4">
               <span className="badge hidden-sm">Teacher: {activeSession?.name}</span>
               <button onClick={() => { setAuthError(''); setAuthSuccess(''); setAdminView('change_password'); }} className="btn" style={{ padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.1)', color: 'white' }}>
@@ -1806,7 +1806,7 @@ export default function App() {
       return (
         <div className="min-h-screen">
           <nav className="nav">
-            <div className="nav-brand"><Calculator color="#2563eb" size={24} /> Olyst Student</div>
+            <div className="nav-brand"><Calculator color="#2563eb" size={24} /> Student Portal</div>
             <div className="flex items-center gap-4">
               <span className="badge hidden-sm"><User size={16} /> {activeSession?.name}</span>
               <button onClick={() => { setAuthError(''); setAuthSuccess(''); setHomeView('change_password'); }} className="btn" style={{ padding: '0.5rem 1rem', background: 'rgba(37,99,235,0.1)', color: '#2563eb' }}>
