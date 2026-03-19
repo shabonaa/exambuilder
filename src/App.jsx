@@ -1,11 +1,11 @@
-// Version: 2.0.8
+// Version: 2.0.7
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Clock, ChevronLeft, ChevronRight, Check, X, AlertTriangle, Calculator, 
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
   Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText, Shield, Key,
-  Download, Upload, Image as ImageIcon, BarChart, Eye, Copy, Database, Search, Tag, Folder
+  Download, Upload, Image as ImageIcon, BarChart, Eye, Copy, Database, Search, Tag
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -153,9 +153,7 @@ const appId = "examBuilder-production";
 const DEFAULT_EXAM = {
   title: "Grade 10 Practice Assessment",
   description: "This simulated examination covers core Grade 10 concepts including Algebra, Geometry, Functions, and Probability.",
-  timeLimit: 30,
-  isActive: true,
-  category: "Practice"
+  timeLimit: 30
 };
 
 const DEFAULT_QUESTIONS = [
@@ -337,9 +335,6 @@ const styles = `
   .checkbox-wrapper { display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-bottom: 1.5rem; background: #f8fafc; padding: 1rem; border-radius: 0.75rem; border: 1px solid #e2e8f0; text-align: left; }
   .checkbox { width: 1.25rem; height: 1.25rem; cursor: pointer; accent-color: #2563eb; }
 
-  .stat-bar-bg { width: 100%; background: #e2e8f0; border-radius: 999px; height: 0.75rem; overflow: hidden; margin-top: 0.5rem; }
-  .stat-bar-fill { height: 100%; transition: width 0.5s ease-out; }
-
   @media (max-width: 640px) {
     .nav { padding: 1rem; }
     .container { padding: 1rem; }
@@ -386,8 +381,7 @@ export default function App() {
   const [exams, setExams] = useState([]);
   const [allQuestions, setAllQuestions] = useState([]);
   const [allResults, setAllResults] = useState([]); 
-  const [topicsList, setTopicsList] = useState([]); // Tracks predefined question topics
-  const [examCategoriesList, setExamCategoriesList] = useState([]); // NEW: Tracks predefined exam categories
+  const [topicsList, setTopicsList] = useState([]); // NEW: Tracks predefined topics
   
   const [pastResults, setPastResults] = useState([]);
   const [selectedExam, setSelectedExam] = useState(null);
@@ -418,9 +412,8 @@ export default function App() {
   // Question Bank States
   const [bankSelection, setBankSelection] = useState([]); 
   const [bankSearchQuery, setBankSearchQuery] = useState('');
-  const [bankTopicFilter, setBankTopicFilter] = useState(''); 
+  const [bankTopicFilter, setBankTopicFilter] = useState(''); // NEW: Topic filter
   const [newTopicName, setNewTopicName] = useState('');
-  const [newExamCategoryName, setNewExamCategoryName] = useState(''); // NEW: For creating exam categories
 
   useEffect(() => {
     const initAuth = async () => {
@@ -472,16 +465,7 @@ export default function App() {
       setTopicsList(loadedTopics);
     });
 
-    const unsubExamCategories = onSnapshot(collection(db, `${publicDataPath}/examCategories`), (snapshot) => {
-      const loadedCategories = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      loadedCategories.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      setExamCategoriesList(loadedCategories);
-    });
-
-    return () => { 
-      unsubAdmins(); unsubTeachers(); unsubStudents(); unsubExams(); 
-      unsubQuestions(); unsubAllResults(); unsubTopics(); unsubExamCategories(); 
-    };
+    return () => { unsubAdmins(); unsubTeachers(); unsubStudents(); unsubExams(); unsubQuestions(); unsubAllResults(); unsubTopics(); };
   }, []);
 
   // 2. Routing based on Active Session
@@ -783,14 +767,7 @@ export default function App() {
   };
 
   const openNewExam = () => {
-    setEditingExamDetails({ 
-      isNew: true, 
-      title: '', 
-      description: '', 
-      timeLimit: 30, 
-      isActive: false, 
-      category: examCategoriesList.length > 0 ? examCategoriesList[0].name : '' 
-    });
+    setEditingExamDetails({ isNew: true, title: '', description: '', timeLimit: 30, isActive: false });
     setAdminView('edit_exam_details');
   };
 
@@ -804,7 +781,6 @@ export default function App() {
       description: editingExamDetails.description,
       timeLimit: Number(editingExamDetails.timeLimit),
       isActive: Boolean(editingExamDetails.isActive),
-      category: editingExamDetails.category || '',
       updatedAt: Date.now()
     };
 
@@ -844,7 +820,6 @@ export default function App() {
         title: `${examToCopy.title} (Copy)`,
         description: examToCopy.description,
         timeLimit: examToCopy.timeLimit,
-        category: examToCopy.category || '',
         createdAt: Date.now(),
         updatedAt: Date.now(),
         isActive: false // Default to draft so they can edit it first before publishing
@@ -1312,15 +1287,12 @@ export default function App() {
                     <h1 className="title">Exam Dashboard</h1>
                     <p className="text-muted">Create and manage your assessments.</p>
                   </div>
-                  <div className="flex gap-2 w-full-sm" style={{ flexWrap: 'wrap' }}>
+                  <div className="flex gap-2 w-full-sm">
                     {exams.length === 0 && (
                       <button onClick={seedDemoExam} className="btn btn-outline flex-1"><BookOpen size={18} /> Load Demo</button>
                     )}
                     <button onClick={() => setAdminView('manage_topics')} className="btn btn-outline flex-1">
                       <Tag size={18} /> Manage Topics
-                    </button>
-                    <button onClick={() => setAdminView('manage_exam_categories')} className="btn btn-outline flex-1">
-                      <Folder size={18} /> Manage Categories
                     </button>
                     <button onClick={openNewExam} className="btn btn-primary flex-1"><Plus size={18} /> Create Exam</button>
                   </div>
@@ -1333,49 +1305,35 @@ export default function App() {
                     <button onClick={openNewExam} className="btn btn-outline">Create Exam</button>
                   </div>
                 ) : (
-                  (() => {
-                    const groupedExams = (Array.isArray(exams) ? exams : []).reduce((acc, exam) => {
-                      const cat = exam.category || 'Uncategorized';
-                      if (!acc[cat]) acc[cat] = [];
-                      acc[cat].push(exam);
-                      return acc;
-                    }, {});
-
-                    return Object.keys(groupedExams).sort().map(category => (
-                      <div key={category} className="mb-8">
-                        <h3 className="title mb-4" style={{ fontSize: '1.5rem', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem' }}>{category}</h3>
-                        <div className="grid grid-cols-2">
-                          {groupedExams[category].map(exam => {
-                            const qCount = allQuestions.filter(q => q.examId === exam.id).length;
-                            return (
-                              <div key={exam.id} className="exam-card">
-                                <div className="flex justify-between items-start mb-2">
-                                  <div>
-                                    <h3 className="subtitle" style={{ margin: 0, wordBreak: 'break-word' }}>{exam.title}</h3>
-                                    <span className={`status-badge ${exam.isActive !== false ? 'status-active' : 'status-draft'}`}>
-                                      {exam.isActive !== false ? 'Active (Visible)' : 'Draft (Hidden)'}
-                                    </span>
-                                  </div>
-                                  <div className="flex gap-2 shrink-0">
-                                    <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
-                                    <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon" title="Edit Exam Details"><Edit2 size={16} /></button>
-                                    <button onClick={() => duplicateExam(exam)} className="btn-icon" title="Duplicate Exam"><Copy size={16} /></button>
-                                    <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger" title="Delete Exam"><Trash2 size={16} /></button>
-                                  </div>
-                                </div>
-                                <p className="text-muted line-clamp-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
-                                <div className="exam-meta">
-                                  <div className="flex items-center gap-2"><LayoutGrid size={14}/> {qCount} Questions</div>
-                                  <div className="flex items-center gap-2"><Clock size={14}/> {exam.timeLimit} Min</div>
-                                </div>
-                                <button onClick={() => { setSelectedExam(exam); setAdminView('manage_questions'); }} className="btn btn-secondary w-full">Manage Questions</button>
-                              </div>
-                            );
-                          })}
+                  <div className="grid grid-cols-2">
+                    {exams.map(exam => {
+                      const qCount = allQuestions.filter(q => q.examId === exam.id).length;
+                      return (
+                        <div key={exam.id} className="exam-card">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <h3 className="subtitle" style={{ margin: 0, wordBreak: 'break-word' }}>{exam.title}</h3>
+                              <span className={`status-badge ${exam.isActive !== false ? 'status-active' : 'status-draft'}`}>
+                                {exam.isActive !== false ? 'Active (Visible)' : 'Draft (Hidden)'}
+                              </span>
+                            </div>
+                            <div className="flex gap-2 shrink-0">
+                              <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
+                              <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon" title="Edit Exam Details"><Edit2 size={16} /></button>
+                              <button onClick={() => duplicateExam(exam)} className="btn-icon" title="Duplicate Exam"><Copy size={16} /></button>
+                              <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger" title="Delete Exam"><Trash2 size={16} /></button>
+                            </div>
+                          </div>
+                          <p className="text-muted line-clamp-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
+                          <div className="exam-meta">
+                            <div className="flex items-center gap-2"><LayoutGrid size={14}/> {qCount} Questions</div>
+                            <div className="flex items-center gap-2"><Clock size={14}/> {exam.timeLimit} Min</div>
+                          </div>
+                          <button onClick={() => { setSelectedExam(exam); setAdminView('manage_questions'); }} className="btn btn-secondary w-full">Manage Questions</button>
                         </div>
-                      </div>
-                    ));
-                  })()
+                      );
+                    })}
+                  </div>
                 )}
               </>
             )}
@@ -1384,8 +1342,8 @@ export default function App() {
               <div className="container-sm mx-auto" style={{ margin: '0 auto' }}>
                  <button onClick={() => { setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Dashboard</button>
                  <div className="mb-6">
-                   <h1 className="title">Manage Question Topics</h1>
-                   <p className="text-muted">Predefine categories for organizing individual questions.</p>
+                   <h1 className="title">Manage Topics</h1>
+                   <p className="text-muted">Predefine categories for organizing your questions.</p>
                  </div>
                  <div className="card mb-6">
                    <form onSubmit={async (e) => {
@@ -1412,47 +1370,6 @@ export default function App() {
                           <button onClick={async () => {
                             if(window.confirm(`Delete topic "${topic.name}"?`)) {
                               await deleteDoc(doc(db, `artifacts/${appId}/public/data/topics/${topic.id}`));
-                            }
-                          }} className="btn-icon btn-icon-danger"><Trash2 size={18} /></button>
-                        </div>
-                      ))
-                    )}
-                 </div>
-              </div>
-            )}
-
-            {adminView === 'manage_exam_categories' && (
-              <div className="container-sm mx-auto" style={{ margin: '0 auto' }}>
-                 <button onClick={() => { setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Dashboard</button>
-                 <div className="mb-6">
-                   <h1 className="title">Manage Exam Categories</h1>
-                   <p className="text-muted">Create folders/categories to group your exams (e.g., "Midterms", "Homework").</p>
-                 </div>
-                 <div className="card mb-6">
-                   <form onSubmit={async (e) => {
-                     e.preventDefault();
-                     if(!newExamCategoryName.trim()) return;
-                     try {
-                       await addDoc(collection(db, `artifacts/${appId}/public/data/examCategories`), { name: newExamCategoryName.trim() });
-                       setNewExamCategoryName('');
-                     } catch(err) { console.error(err); }
-                   }} className="flex gap-4">
-                     <div className="input-group flex-1 mb-0">
-                       <input type="text" value={newExamCategoryName} onChange={e=>setNewExamCategoryName(e.target.value)} className="input no-icon" placeholder="New Category (e.g. Quizzes)" />
-                     </div>
-                     <button type="submit" className="btn btn-primary" style={{ padding: '0.75rem 1rem' }}><Plus size={18} /> Add</button>
-                   </form>
-                 </div>
-                 <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                    {examCategoriesList.length === 0 ? (
-                      <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No exam categories have been created yet.</div>
-                    ) : (
-                      examCategoriesList.map(cat => (
-                        <div key={cat.id} className="admin-list-item flex justify-between items-center">
-                          <span className="font-bold">{cat.name}</span>
-                          <button onClick={async () => {
-                            if(window.confirm(`Delete category "${cat.name}"? Exams in this category will become Uncategorized.`)) {
-                              await deleteDoc(doc(db, `artifacts/${appId}/public/data/examCategories/${cat.id}`));
                             }
                           }} className="btn-icon btn-icon-danger"><Trash2 size={18} /></button>
                         </div>
@@ -1604,21 +1521,6 @@ export default function App() {
                   <button onClick={() => { setEditingExamDetails(null); setAdminView('list_exams'); }} className="btn-icon"><X size={24} /></button>
                 </div>
                 <form onSubmit={saveExamDetails} style={{ padding: '2rem' }}>
-                  
-                  <div className="input-group mb-6">
-                    <label className="label">Exam Category</label>
-                    {examCategoriesList.length === 0 ? (
-                       <div style={{ padding: '0.75rem 1rem', background: '#fef2f2', color: '#ef4444', borderRadius: '0.75rem', fontSize: '0.875rem', border: '1px solid #fca5a5' }}>
-                         Please add categories in the 'Manage Categories' section before organizing exams. Uncategorized will be used by default.
-                       </div>
-                    ) : (
-                      <select value={editingExamDetails.category || ''} onChange={e => setEditingExamDetails({...editingExamDetails, category: e.target.value})} className="input no-icon">
-                        <option value="">Uncategorized</option>
-                        {examCategoriesList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                      </select>
-                    )}
-                  </div>
-
                   <div className="input-group">
                     <label className="label">Exam Title</label>
                     <input required type="text" value={editingExamDetails.title} onChange={e => setEditingExamDetails({...editingExamDetails, title: e.target.value})} className="input no-icon" placeholder="e.g. Midterm Assessment" />
@@ -1975,36 +1877,22 @@ export default function App() {
                   {activeExams.length === 0 ? (
                     <div className="empty-state">No exams are currently available. Please check back later.</div>
                   ) : (
-                    (() => {
-                      const groupedActiveExams = activeExams.reduce((acc, exam) => {
-                        const cat = exam.category || 'Uncategorized';
-                        if (!acc[cat]) acc[cat] = [];
-                        acc[cat].push(exam);
-                        return acc;
-                      }, {});
-
-                      return Object.keys(groupedActiveExams).sort().map(category => (
-                        <div key={category} className="mb-8">
-                          <h3 className="title mb-4" style={{ fontSize: '1.5rem', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem' }}>{category}</h3>
-                          <div className="grid grid-cols-3">
-                            {groupedActiveExams[category].map(exam => {
-                              const qCount = allQuestions.filter(q => q.examId === exam.id).length;
-                              return (
-                                <div key={exam.id} className="exam-card">
-                                  <h3 className="subtitle" style={{ marginBottom: '0.5rem' }}>{exam.title}</h3>
-                                  <p className="text-muted line-clamp-3" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
-                                  <div className="exam-meta">
-                                    <div className="flex items-center gap-2"><LayoutGrid size={14} color="#3b82f6"/> {qCount} Questions</div>
-                                    <div className="flex items-center gap-2"><Clock size={14} color="#3b82f6"/> {exam.timeLimit} Min</div>
-                                  </div>
-                                  <button onClick={() => selectExamForTaking(exam)} className="btn btn-outline w-full" style={{ borderColor: '#bfdbfe', color: '#1d4ed8' }}>Select Exam <ChevronRight size={16}/></button>
-                                </div>
-                              );
-                            })}
+                    <div className="grid grid-cols-3">
+                      {activeExams.map(exam => {
+                        const qCount = allQuestions.filter(q => q.examId === exam.id).length;
+                        return (
+                          <div key={exam.id} className="exam-card">
+                            <h3 className="subtitle" style={{ marginBottom: '0.5rem' }}>{exam.title}</h3>
+                            <p className="text-muted line-clamp-3" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
+                            <div className="exam-meta">
+                              <div className="flex items-center gap-2"><LayoutGrid size={14} color="#3b82f6"/> {qCount} Questions</div>
+                              <div className="flex items-center gap-2"><Clock size={14} color="#3b82f6"/> {exam.timeLimit} Min</div>
+                            </div>
+                            <button onClick={() => selectExamForTaking(exam)} className="btn btn-outline w-full" style={{ borderColor: '#bfdbfe', color: '#1d4ed8' }}>Select Exam <ChevronRight size={16}/></button>
                           </div>
-                        </div>
-                      ));
-                    })()
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
                 
@@ -2017,18 +1905,18 @@ export default function App() {
                     </div>
                   ) : (
                     <div>
-                      {(Array.isArray(pastResults) ? pastResults : []).map(result => (
+                      {pastResults.map(result => (
                         <div key={result.id} className="history-item">
                           <div className="flex items-center gap-4">
                             <div className="history-icon"><Calendar size={20} /></div>
                             <div>
                               <p className="font-bold">{result.examTitle || 'Practice Exam'}</p>
-                              <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Taken on {new Date(result.timestamp || Date.now()).toLocaleDateString()}</p>
+                              <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Taken on {new Date(result.timestamp).toLocaleDateString()}</p>
                             </div>
                           </div>
                           <div className="text-right card" style={{ padding: '0.75rem 1rem', minWidth: '100px' }}>
-                            <p className={`font-bold text-2xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage || 0}%</p>
-                            <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{result.score || 0} / {result.total || 0}</p>
+                            <p className={`font-bold text-2xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage}%</p>
+                            <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{result.score} / {result.total}</p>
                           </div>
                         </div>
                       ))}
@@ -2043,7 +1931,6 @@ export default function App() {
     }
 
     if (appState === 'exam_intro' && selectedExam) {
-      const qCount = getExamQuestionsFromDB().length;
       return (
         <div className="min-h-screen">
           <nav className="nav">
@@ -2056,118 +1943,66 @@ export default function App() {
               <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>{selectedExam.description}</p>
               
               <div className="flex justify-center items-center gap-4 mb-8 flex-col-sm">
-                <div className="badge" style={{ padding: '1rem 2rem', fontSize: '1rem' }}><LayoutGrid size={20} color="#3b82f6"/> {qCount} Questions</div>
+                <div className="badge" style={{ padding: '1rem 2rem', fontSize: '1rem' }}><LayoutGrid size={20} color="#3b82f6"/> {currentQuestions.length} Questions</div>
                 <div className="badge" style={{ padding: '1rem 2rem', fontSize: '1rem' }}><Clock size={20} color="#3b82f6"/> {selectedExam.timeLimit} Minutes</div>
               </div>
               
-              {qCount === 0 ? (
-                <button disabled className="btn btn-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.125rem' }}>Exam Not Ready</button>
-              ) : (
-                <div className="grid grid-cols-2 mt-4">
-                  <div className="card" style={{ background: '#f8fafc', border: '2px solid #e2e8f0', boxShadow: 'none' }}>
-                    <Shuffle size={32} color="#2563eb" style={{ margin: '0 auto 1rem' }} />
-                    <h3 className="subtitle">Timed Exam</h3>
-                    <p className="text-muted mb-4" style={{ fontSize: '0.875rem' }}>Timer active. Questions and options are shuffled to prevent cheating. Score is saved.</p>
-                    <button onClick={() => startExam('timed')} className="btn btn-primary w-full">Start Exam</button>
-                  </div>
-                  <div className="card" style={{ background: '#fffbeb', border: '2px solid #fde68a', boxShadow: 'none' }}>
-                    <Lightbulb size={32} color="#d97706" style={{ margin: '0 auto 1rem' }} />
-                    <h3 className="subtitle">Study Mode</h3>
-                    <p className="text-muted mb-4" style={{ fontSize: '0.875rem' }}>No timer. Get immediate explanations after each answer. Score is not saved to history.</p>
-                    <button onClick={() => startExam('study')} className="btn btn-outline w-full" style={{ borderColor: '#fcd34d', color: '#b45309', background: '#fff' }}>Start Practice</button>
-                  </div>
-                </div>
-              )}
+              <button onClick={startExam} disabled={currentQuestions.length === 0} className="btn btn-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.125rem' }}>
+                {currentQuestions.length === 0 ? 'Exam Not Ready' : 'Start Assessment Now'}
+              </button>
             </div>
           </div>
         </div>
       );
     }
 
-    if (appState === 'exam' && sessionQuestions[currentQIndex]) {
-      const currentQuestion = sessionQuestions[currentQIndex];
-      const hasAnsweredCurrent = answers[currentQuestion?.id] !== undefined;
-
+    if (appState === 'exam' && currentQuestions[currentQIndex]) {
+      const currentQuestion = currentQuestions[currentQIndex];
       return (
         <div className="min-h-screen">
           <header className="nav">
-            <div className="nav-brand flex-1">
-              {examMode === 'study' ? <Lightbulb color="#d97706" size={24}/> : <Calculator color="#2563eb" size={24}/>} 
-              <span className="hidden-sm">{selectedExam.title} {examMode === 'study' && '(Practice)'}</span>
-            </div>
-            {examMode === 'timed' && (
-              <div className={`timer mx-4 ${timeLeft < 300 ? 'urgent' : ''}`}><Clock size={18}/> {formatTime(timeLeft)}</div>
-            )}
-            <button className="btn btn-secondary" onClick={handleAttemptSubmit}>Finish</button>
+            <div className="nav-brand flex-1"><Calculator color="#2563eb" size={24}/> <span className="hidden-sm">{selectedExam.title}</span></div>
+            <div className={`timer mx-4 ${timeLeft < 300 ? 'urgent' : ''}`}><Clock size={18}/> {formatTime(timeLeft)}</div>
+            <button className="btn btn-secondary" onClick={handleAttemptSubmit}>Submit</button>
           </header>
           
           <main className="container flex-col" style={{ flex: 1 }}>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.25rem' }}>{currentQuestion?.topic || ''}</div>
-                <h2 className="subtitle text-muted">Question {currentQIndex + 1} of {sessionQuestions.length}</h2>
+                <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.25rem' }}>{currentQuestion.topic}</div>
+                <h2 className="subtitle text-muted">Question {currentQIndex + 1} of {currentQuestions.length}</h2>
               </div>
             </div>
             
             <div className="question-box">
-              <p style={{ fontSize: '1.25rem', fontWeight: 500, marginBottom: currentQuestion?.imageUrl ? '1rem' : '0' }}>
-                <LatexText text={currentQuestion?.text || ''} />
-              </p>
+              <div className="math-scroll" style={{ fontSize: '1.25rem', fontWeight: 500 }}><LatexText text={currentQuestion.text} /></div>
               {currentQuestion?.imageUrl && (
-                 <img src={currentQuestion.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '0.5rem', objectFit: 'contain', border: '1px solid #e2e8f0', marginBottom: '1rem' }} />
+                 <img src={currentQuestion.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '0.5rem', objectFit: 'contain', border: '1px solid #e2e8f0', marginTop: '1rem' }} />
               )}
             </div>
             
             <div className="mb-8">
-              {(Array.isArray(currentQuestion?.options) ? currentQuestion.options : []).map((option, optIdx) => {
-                const isSelected = answers[currentQuestion?.id] === option?.id;
-                
-                // Extra styling for Study Mode
-                let studyModeClass = '';
-                if (examMode === 'study' && hasAnsweredCurrent) {
-                  if (option?.id === currentQuestion.correctId) studyModeClass = 'border-color: #22c55e; background: #f0fdf4;';
-                  else if (isSelected) studyModeClass = 'border-color: #ef4444; background: #fef2f2;';
-                  else studyModeClass = 'opacity: 0.5;';
-                }
-
+              {currentQuestion.options.map(option => {
+                const isSelected = answers[currentQuestion.id] === option.id;
                 return (
-                  <button 
-                    key={option?.id || optIdx} 
-                    onClick={() => handleSelectOption(option?.id)} 
-                    disabled={examMode === 'study' && hasAnsweredCurrent}
-                    className={`option-btn ${isSelected ? 'selected' : ''}`}
-                    style={studyModeClass ? { cssText: studyModeClass } : {}}
-                  >
-                    <div className="option-letter">{option?.id || '?'}</div>
-                    <span className="flex-1"><LatexText text={option?.text || ''} /></span>
-                    {examMode === 'study' && hasAnsweredCurrent && option?.id === currentQuestion.correctId && <Check color="#166534" size={24} />}
-                    {examMode === 'study' && hasAnsweredCurrent && isSelected && option?.id !== currentQuestion.correctId && <X color="#991b1b" size={24} />}
+                  <button key={option.id} onClick={() => handleSelectOption(option.id)} className={`option-btn ${isSelected ? 'selected' : ''}`}>
+                    <div className="option-letter">{option.id}</div>
+                    <div className="flex-1 math-scroll text-left"><LatexText text={option.text} /></div>
                   </button>
                 );
               })}
             </div>
-
-            {/* Study Mode Explanation Box */}
-            {examMode === 'study' && hasAnsweredCurrent && (
-              <div className="card mb-8" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
-                <h3 className="subtitle flex items-center gap-2 mb-2" style={{ color: '#b45309' }}><Lightbulb size={20} /> Explanation</h3>
-                <p style={{ color: '#92400e' }}><LatexText text={currentQuestion?.explanation || 'No explanation provided.'} /></p>
-                {currentQuestion?.explanationImageUrl && (
-                  <img src={currentQuestion.explanationImageUrl} alt="Explanation Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginTop: '1rem', objectFit: 'contain', border: '1px solid #fcd34d' }} />
-                )}
-              </div>
-            )}
             
             <div className="progress-nav flex-col-sm gap-4">
               <button className="btn btn-outline w-full-sm" disabled={currentQIndex === 0} onClick={() => setCurrentQIndex(prev => prev - 1)}><ChevronLeft size={20}/> Previous</button>
               
               <div className="progress-grid hidden-sm">
-                {(Array.isArray(sessionQuestions) ? sessionQuestions : []).map((q, idx) => (
-                  <button key={q?.id || idx} onClick={() => setCurrentQIndex(idx)} className={`progress-dot ${currentQIndex === idx ? 'current' : ''} ${answers[q?.id] ? 'answered' : ''}`}>{idx + 1}</button>
+                {currentQuestions.map((q, idx) => (
+                  <button key={q.id} onClick={() => setCurrentQIndex(idx)} className={`progress-dot ${currentQIndex === idx ? 'current' : ''} ${answers[q.id] ? 'answered' : ''}`}>{idx + 1}</button>
                 ))}
               </div>
               
-              {currentQIndex === sessionQuestions.length - 1 ? (
+              {currentQIndex === currentQuestions.length - 1 ? (
                 <button className="btn btn-primary w-full-sm" onClick={handleAttemptSubmit}>Finish <Check size={20}/></button>
               ) : (
                 <button className="btn btn-secondary w-full-sm" onClick={() => setCurrentQIndex(prev => prev + 1)}>Next <ChevronRight size={20}/></button>
@@ -2179,13 +2014,13 @@ export default function App() {
             <div className="modal-overlay">
               <div className="modal-content">
                 <div className="flex items-center justify-center gap-4 mb-4 text-warning">
-                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertIcon size={32} /></div>
+                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertTriangle size={32} /></div>
                 </div>
                 <h3 className="title">Unanswered Questions</h3>
-                <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{sessionQuestions.length - Object.keys(answers || {}).length}</strong> unanswered questions. Are you sure you want to finish?</p>
+                <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{currentQuestions.length - Object.keys(answers).length}</strong> unanswered questions. Are you sure you want to submit?</p>
                 <div className="flex gap-3 justify-center flex-col-sm">
                   <button onClick={() => setShowSubmitModal(false)} className="btn btn-outline w-full-sm">Return to Exam</button>
-                  <button onClick={finishExam} className="btn btn-primary w-full-sm">Finish Anyway</button>
+                  <button onClick={finishExam} className="btn btn-primary w-full-sm">Submit Anyway</button>
                 </div>
               </div>
             </div>
@@ -2196,64 +2031,31 @@ export default function App() {
 
     if (appState === 'results') {
       const { score, percentage } = currentScore;
-      
-      // Calculate Topic Insights
-      const topicStats = {};
-      (Array.isArray(sessionQuestions) ? sessionQuestions : []).forEach(q => {
-        if (!q || !q.topic) return;
-        if (!topicStats[q.topic]) topicStats[q.topic] = { total: 0, correct: 0 };
-        topicStats[q.topic].total++;
-        if (answers[q.id] === q.correctId) topicStats[q.topic].correct++;
-      });
-
       return (
         <div className="min-h-screen">
           <div className="container">
             <div className="card text-center mb-8">
               <h1 className="title mb-2">Exam Completed</h1>
-              <p className="text-muted mb-8">
-                {examMode === 'study' ? "You have finished this practice session." : `Your score for ${selectedExam.title} has been saved.`}
-              </p>
+              <p className="text-muted mb-8">Your score for <strong>{selectedExam.title}</strong> has been saved.</p>
               
               <div className="result-circle">
                 <div className="result-score" style={{ color: percentage >= 80 ? '#22c55e' : percentage >= 50 ? '#f59e0b' : '#ef4444' }}>{score}</div>
-                <div className="text-muted font-bold">out of {sessionQuestions.length}</div>
+                <div className="text-muted font-bold">out of {currentQuestions.length}</div>
               </div>
               
               <h2 className={`title mb-8 ${percentage >= 80 ? 'text-success' : percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{percentage}% Score</h2>
               <button onClick={() => { setSelectedExam(null); setAppState('home'); }} className="btn btn-secondary">Return to Dashboard</button>
             </div>
 
-            {/* Feature: Skill Breakdown (Topic Insights) */}
-            <h3 className="title mb-6 flex items-center gap-3"><BarChart size={24} color="#2563eb" /> Skill Breakdown</h3>
-            <div className="grid grid-cols-2 mb-8">
-              {Object.keys(topicStats).map(topic => {
-                const stat = topicStats[topic];
-                const topicPct = Math.round((stat.correct / stat.total) * 100);
-                return (
-                  <div key={topic} className="card" style={{ padding: '1.5rem' }}>
-                    <div className="flex justify-between items-center mb-2">
-                      <strong style={{ color: '#0f172a' }}>{topic}</strong>
-                      <span className="font-bold" style={{ color: topicPct >= 80 ? '#166534' : topicPct >= 50 ? '#b45309' : '#991b1b' }}>{topicPct}%</span>
-                    </div>
-                    <div className="text-muted" style={{ fontSize: '0.875rem' }}>{stat.correct} of {stat.total} correct</div>
-                    <div className="stat-bar-bg">
-                      <div className="stat-bar-fill" style={{ width: `${topicPct}%`, background: topicPct >= 80 ? '#22c55e' : topicPct >= 50 ? '#f59e0b' : '#ef4444' }}></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
             <h3 className="title mb-6 flex items-center gap-3"><BookOpen size={24} color="#2563eb" /> Detailed Review</h3>
             <div>
-              {(Array.isArray(sessionQuestions) ? sessionQuestions : []).map((q, idx) => {
-                const userAnswer = answers[q?.id];
-                const isCorrect = userAnswer === q?.correctId;
+              {currentQuestions.map((q, idx) => {
+                const userAnswer = answers[q.id];
+                const isCorrect = userAnswer === q.correctId;
                 const isSkipped = userAnswer === undefined;
                 
                 return (
-                  <div key={q?.id || idx} className="review-item">
+                  <div key={q.id} className="review-item">
                     <div className={`review-header ${isCorrect ? 'correct' : isSkipped ? '' : 'incorrect'}`}>
                       <div className={`review-icon ${isCorrect ? 'bg-success' : isSkipped ? 'bg-muted' : 'bg-danger'}`}>
                         {isCorrect ? <Check size={16} /> : isSkipped ? <span style={{ fontSize: '1rem' }}>-</span> : <X size={16} />}
@@ -2261,22 +2063,20 @@ export default function App() {
                       Question {idx + 1}: {isCorrect ? 'Correct' : isSkipped ? 'Skipped' : 'Incorrect'}
                     </div>
                     <div className="review-body">
-                      <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q?.topic || ''}</div>
-                      <p className="subtitle mb-4"><LatexText text={q?.text || ''} /></p>
+                      <div className="subtitle mb-6 math-scroll"><LatexText text={q.text} /></div>
                       
-                      {/* Render uploaded image if it exists */}
                       {q?.imageUrl && (
                          <img src={q.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginBottom: '1.5rem', objectFit: 'contain', border: '1px solid #e2e8f0' }} />
                       )}
 
                       <div className="grid grid-cols-2 mb-6">
-                        {(Array.isArray(q?.options) ? q.options : []).map((opt, oIdx) => {
-                          const isThisUserChoice = userAnswer === opt?.id;
-                          const isThisCorrectChoice = q?.correctId === opt?.id;
+                        {q.options.map(opt => {
+                          const isThisUserChoice = userAnswer === opt.id;
+                          const isThisCorrectChoice = q.correctId === opt.id;
                           return (
-                            <div key={opt?.id || oIdx} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
-                              <div className="font-bold shrink-0">{opt?.id || '?'}.</div>
-                              <div className="flex-1"><LatexText text={opt?.text || ''} /></div>
+                            <div key={opt.id} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
+                              <div className="font-bold shrink-0">{opt.id}.</div>
+                              <div className="flex-1 math-scroll"><LatexText text={opt.text} /></div>
                               {isThisCorrectChoice && <Check size={18} className="shrink-0" />}
                               {isThisUserChoice && !isCorrect && <X size={18} className="shrink-0" />}
                             </div>
@@ -2285,7 +2085,7 @@ export default function App() {
                       </div>
                       <div className="review-explanation">
                         <strong style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>Explanation</strong>
-                        <LatexText text={q?.explanation || 'No explanation provided.'} />
+                        <div className="math-scroll"><LatexText text={q.explanation} /></div>
                         {q?.explanationImageUrl && (
                           <img src={q.explanationImageUrl} alt="Explanation Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginTop: '1rem', objectFit: 'contain', border: '1px solid #bfdbfe' }} />
                         )}
@@ -2303,11 +2103,9 @@ export default function App() {
   };
 
   return (
-    <ErrorBoundary>
-      <>
-        <style>{styles}</style>
-        {renderContent()}
-      </>
-    </ErrorBoundary>
+    <>
+      <style>{styles}</style>
+      {renderContent()}
+    </>
   );
 }
