@@ -1,4 +1,4 @@
-// Version: 2.0.6
+// Version: 2.0.7
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -328,6 +328,12 @@ const styles = `
 
   .error-message { background: #fef2f2; color: #ef4444; border: 1px solid #fca5a5; padding: 1rem; border-radius: 0.75rem; font-weight: 600; text-align: center; font-size: 0.875rem; }
   .success-message { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 1rem; border-radius: 0.75rem; font-weight: 600; text-align: center; font-size: 0.875rem; }
+
+  .status-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
+  .status-active { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .status-draft { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+  .checkbox-wrapper { display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-bottom: 1.5rem; background: #f8fafc; padding: 1rem; border-radius: 0.75rem; border: 1px solid #e2e8f0; text-align: left; }
+  .checkbox { width: 1.25rem; height: 1.25rem; cursor: pointer; accent-color: #2563eb; }
 
   @media (max-width: 640px) {
     .nav { padding: 1rem; }
@@ -761,7 +767,7 @@ export default function App() {
   };
 
   const openNewExam = () => {
-    setEditingExamDetails({ isNew: true, title: '', description: '', timeLimit: 30 });
+    setEditingExamDetails({ isNew: true, title: '', description: '', timeLimit: 30, isActive: false });
     setAdminView('edit_exam_details');
   };
 
@@ -774,6 +780,7 @@ export default function App() {
       title: editingExamDetails.title,
       description: editingExamDetails.description,
       timeLimit: Number(editingExamDetails.timeLimit),
+      isActive: Boolean(editingExamDetails.isActive),
       updatedAt: Date.now()
     };
 
@@ -1303,8 +1310,13 @@ export default function App() {
                       const qCount = allQuestions.filter(q => q.examId === exam.id).length;
                       return (
                         <div key={exam.id} className="exam-card">
-                          <div className="flex justify-between items-center mb-2">
-                            <h3 className="subtitle" style={{ margin: 0, wordBreak: 'break-word' }}>{exam.title}</h3>
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <h3 className="subtitle" style={{ margin: 0, wordBreak: 'break-word' }}>{exam.title}</h3>
+                              <span className={`status-badge ${exam.isActive !== false ? 'status-active' : 'status-draft'}`}>
+                                {exam.isActive !== false ? 'Active (Visible)' : 'Draft (Hidden)'}
+                              </span>
+                            </div>
                             <div className="flex gap-2 shrink-0">
                               <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
                               <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon" title="Edit Exam Details"><Edit2 size={16} /></button>
@@ -1521,6 +1533,15 @@ export default function App() {
                     <label className="label">Time Limit (Minutes)</label>
                     <input required type="number" min="1" max="300" value={editingExamDetails.timeLimit} onChange={e => setEditingExamDetails({...editingExamDetails, timeLimit: e.target.value})} className="input no-icon" />
                   </div>
+
+                  <label className="checkbox-wrapper">
+                    <input type="checkbox" checked={editingExamDetails.isActive !== false} onChange={e => setEditingExamDetails({...editingExamDetails, isActive: e.target.checked})} className="checkbox" />
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#0f172a' }}>Active Status</div>
+                      <div style={{ fontSize: '0.875rem', color: '#64748b' }}>If checked, students will be able to see and take this exam.</div>
+                    </div>
+                  </label>
+
                   <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
                     <button type="button" onClick={() => { setEditingExamDetails(null); setAdminView('list_exams'); }} className="btn btn-outline">Cancel</button>
                     <button type="submit" className="btn btn-primary"><Save size={18} /> Save Exam</button>
@@ -1803,6 +1824,8 @@ export default function App() {
     }
 
     if (appState === 'home') {
+      const activeExams = exams.filter(e => e.isActive !== false);
+
       return (
         <div className="min-h-screen">
           <nav className="nav">
@@ -1851,11 +1874,11 @@ export default function App() {
               <>
                 <div className="mb-8">
                   <h2 className="title flex items-center gap-3 mb-6"><BookOpen size={28} color="#2563eb" /> Available Assessments</h2>
-                  {exams.length === 0 ? (
+                  {activeExams.length === 0 ? (
                     <div className="empty-state">No exams are currently available. Please check back later.</div>
                   ) : (
                     <div className="grid grid-cols-3">
-                      {exams.map(exam => {
+                      {activeExams.map(exam => {
                         const qCount = allQuestions.filter(q => q.examId === exam.id).length;
                         return (
                           <div key={exam.id} className="exam-card">
