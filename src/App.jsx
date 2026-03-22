@@ -1,9 +1,9 @@
-// Version: 2.2.0
+// Version: 2.3.0
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Clock, ChevronLeft, ChevronRight, Check, X, AlertTriangle, Calculator, 
-  LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
+  LayoutGrid, User, Users, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
   Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText, Shield, Key,
   Download, Upload, Image as ImageIcon, BarChart, Eye, Copy, Database, Search, Tag, Folder,
   Shuffle, Lightbulb, Printer
@@ -158,7 +158,9 @@ const DEFAULT_EXAM = {
   isActive: true,
   category: "Practice",
   openDate: '',
-  closeDate: ''
+  closeDate: '',
+  assignToAll: true,
+  assignedStudentIds: []
 };
 
 const DEFAULT_QUESTIONS = [
@@ -402,6 +404,7 @@ export default function App() {
   const [allResults, setAllResults] = useState([]); 
   const [topicsList, setTopicsList] = useState([]); 
   const [examCategoriesList, setExamCategoriesList] = useState([]); 
+  const [studentGroupsList, setStudentGroupsList] = useState([]); // NEW: Tracks student groups
   
   const [pastResults, setPastResults] = useState([]);
   const [selectedExam, setSelectedExam] = useState(null);
@@ -434,7 +437,7 @@ export default function App() {
   const [bankSearchQuery, setBankSearchQuery] = useState('');
   const [bankTopicFilter, setBankTopicFilter] = useState(''); 
   
-  // Manage Categories/Topics States
+  // Manage Categories/Topics/Groups States
   const [newTopicName, setNewTopicName] = useState('');
   const [editingTopicId, setEditingTopicId] = useState(null);
   const [editingTopicName, setEditingTopicName] = useState('');
@@ -442,6 +445,9 @@ export default function App() {
   const [newExamCategoryName, setNewExamCategoryName] = useState(''); 
   const [editingCategoryId, setEditingCategoryId] = useState(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
+
+  const [newGroupName, setNewGroupName] = useState('');
+  const [editingGroup, setEditingGroup] = useState(null);
 
   // Print States
   const [printMode, setPrintMode] = useState('student');
@@ -502,9 +508,15 @@ export default function App() {
       setExamCategoriesList(loadedCategories);
     });
 
+    const unsubStudentGroups = onSnapshot(collection(db, `${publicDataPath}/studentGroups`), (snapshot) => {
+      const loadedGroups = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      loadedGroups.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setStudentGroupsList(loadedGroups);
+    });
+
     return () => { 
       unsubAdmins(); unsubTeachers(); unsubStudents(); unsubExams(); 
-      unsubQuestions(); unsubAllResults(); unsubTopics(); unsubExamCategories(); 
+      unsubQuestions(); unsubAllResults(); unsubTopics(); unsubExamCategories(); unsubStudentGroups();
     };
   }, []);
 
@@ -833,7 +845,9 @@ export default function App() {
       isActive: false, 
       category: examCategoriesList.length > 0 ? examCategoriesList[0].name : '',
       openDate: '',
-      closeDate: ''
+      closeDate: '',
+      assignToAll: true,
+      assignedStudentIds: []
     });
     setAdminView('edit_exam_details');
   };
@@ -851,6 +865,8 @@ export default function App() {
       category: editingExamDetails.category || '',
       openDate: editingExamDetails.openDate || '',
       closeDate: editingExamDetails.closeDate || '',
+      assignToAll: Boolean(editingExamDetails.assignToAll !== false),
+      assignedStudentIds: editingExamDetails.assignedStudentIds || [],
       updatedAt: Date.now()
     };
 
@@ -893,6 +909,8 @@ export default function App() {
         category: examToCopy.category || '',
         openDate: examToCopy.openDate || '',
         closeDate: examToCopy.closeDate || '',
+        assignToAll: examToCopy.assignToAll !== false,
+        assignedStudentIds: examToCopy.assignedStudentIds || [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
         isActive: false // Default to draft so they can edit it first before publishing
@@ -1452,6 +1470,9 @@ export default function App() {
                     <button onClick={() => setAdminView('manage_exam_categories')} className="btn btn-outline flex-1">
                       <Folder size={18} /> Manage Categories
                     </button>
+                    <button onClick={() => { setEditingGroup(null); setNewGroupName(''); setAdminView('manage_groups'); }} className="btn btn-outline flex-1">
+                      <Users size={18} /> Manage Classes
+                    </button>
                     <button onClick={openNewExam} className="btn btn-primary flex-1"><Plus size={18} /> Create Exam</button>
                   </div>
                 </div>
@@ -1492,9 +1513,12 @@ export default function App() {
                                 <div className="flex justify-between items-start mb-2">
                                   <div>
                                     <h3 className="subtitle" style={{ margin: 0, wordBreak: 'break-word' }}>{exam.title}</h3>
-                                    <div className="flex gap-2 items-center flex-wrap">
+                                    <div className="flex gap-2 items-center flex-wrap mt-1">
                                       <span className={`status-badge ${exam.isActive !== false ? 'status-active' : 'status-draft'}`}>
-                                        {exam.isActive !== false ? 'Active (Visible)' : 'Draft (Hidden)'}
+                                        {exam.isActive !== false ? 'Active' : 'Draft'}
+                                      </span>
+                                      <span className="status-badge" style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' }}>
+                                        {exam.assignToAll !== false ? 'All Students' : `${(exam.assignedStudentIds || []).length} Assigned`}
                                       </span>
                                       {scheduleStatus && (
                                         <span className="status-badge" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
@@ -1526,6 +1550,111 @@ export default function App() {
                   })()
                 )}
               </>
+            )}
+
+            {adminView === 'manage_groups' && (
+              <div className="container-sm mx-auto" style={{ margin: '0 auto', maxWidth: '40rem' }}>
+                 <button onClick={() => { setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Dashboard</button>
+                 <div className="mb-6">
+                   <h1 className="title">Manage Classes & Groups</h1>
+                   <p className="text-muted">Create groups of students to quickly assign exams.</p>
+                 </div>
+
+                 {!editingGroup ? (
+                   <>
+                     <div className="card mb-6">
+                       <form onSubmit={async (e) => {
+                         e.preventDefault();
+                         if(!newGroupName.trim()) return;
+                         try {
+                           await addDoc(collection(db, `artifacts/${appId}/public/data/studentGroups`), { name: newGroupName.trim(), studentIds: [] });
+                           setNewGroupName('');
+                         } catch(err) { console.error(err); }
+                       }} className="flex gap-4">
+                         <div className="input-group flex-1 mb-0">
+                           <input type="text" value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} className="input no-icon" placeholder="New Class (e.g. Period 1 Math)" />
+                         </div>
+                         <button type="submit" className="btn btn-primary" style={{ padding: '0.75rem 1rem' }}><Plus size={18} /> Add</button>
+                       </form>
+                     </div>
+                     
+                     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                        {studentGroupsList.length === 0 ? (
+                          <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No groups have been created yet.</div>
+                        ) : (
+                          studentGroupsList.map(group => (
+                            <div key={group.id} className="admin-list-item flex justify-between items-center">
+                              <div>
+                                <span className="font-bold block">{group.name}</span>
+                                <span className="text-sm text-muted">{(group.studentIds || []).length} Students Enrolled</span>
+                              </div>
+                              <div className="flex gap-2 shrink-0">
+                                <button onClick={() => setEditingGroup(group)} className="btn-icon"><Edit2 size={18} /></button>
+                                <button onClick={async () => {
+                                  if(window.confirm(`Delete group "${group.name}"? Exams assigned to these students will not be unassigned.`)) {
+                                    await deleteDoc(doc(db, `artifacts/${appId}/public/data/studentGroups/${group.id}`));
+                                  }
+                                }} className="btn-icon btn-icon-danger"><Trash2 size={18} /></button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                     </div>
+                   </>
+                 ) : (
+                   <div className="card">
+                     <div className="flex justify-between items-center mb-6">
+                       <h2 className="subtitle m-0">Edit Group: {editingGroup.name}</h2>
+                       <button onClick={() => setEditingGroup(null)} className="btn-icon"><X size={20}/></button>
+                     </div>
+                     
+                     <div className="input-group mb-6">
+                       <label className="label">Group Name</label>
+                       <input type="text" value={editingGroup.name} onChange={e => setEditingGroup({...editingGroup, name: e.target.value})} className="input no-icon" />
+                     </div>
+
+                     <div className="input-group mb-6">
+                       <label className="label mb-2">Select Enrolled Students</label>
+                       <div className="max-h-64 overflow-y-auto border border-slate-200 rounded p-2 bg-slate-50">
+                         {studentProfiles.length === 0 ? (
+                           <p className="text-sm text-muted p-2">No students registered yet.</p>
+                         ) : (
+                           studentProfiles.map(student => {
+                             const isSelected = (editingGroup.studentIds || []).includes(student.studentId);
+                             return (
+                               <label key={student.studentId} className="flex items-center gap-3 p-2 hover:bg-slate-100 cursor-pointer rounded border-b border-slate-200 last:border-0">
+                                 <input type="checkbox" className="checkbox m-0 shrink-0" checked={isSelected} onChange={e => {
+                                   let currentIds = [...(editingGroup.studentIds || [])];
+                                   if (e.target.checked) currentIds.push(student.studentId);
+                                   else currentIds = currentIds.filter(id => id !== student.studentId);
+                                   setEditingGroup({...editingGroup, studentIds: currentIds});
+                                 }}/>
+                                 <div>
+                                   <div className="font-bold text-sm" style={{ color: isSelected ? '#1d4ed8' : '#0f172a' }}>{student.name}</div>
+                                   <div className="text-xs text-muted">{student.email}</div>
+                                 </div>
+                               </label>
+                             );
+                           })
+                         )}
+                       </div>
+                     </div>
+
+                     <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
+                       <button className="btn btn-outline" onClick={() => setEditingGroup(null)}>Cancel</button>
+                       <button className="btn btn-primary" onClick={async () => {
+                         try {
+                           await updateDoc(doc(db, `artifacts/${appId}/public/data/studentGroups/${editingGroup.id}`), {
+                             name: editingGroup.name,
+                             studentIds: editingGroup.studentIds || []
+                           });
+                           setEditingGroup(null);
+                         } catch(err) { console.error(err); }
+                       }}><Save size={18}/> Save Group</button>
+                     </div>
+                   </div>
+                 )}
+              </div>
             )}
 
             {adminView === 'manage_topics' && (
@@ -1802,7 +1931,7 @@ export default function App() {
                     <textarea required rows={3} value={editingExamDetails.description} onChange={e => setEditingExamDetails({...editingExamDetails, description: e.target.value})} className="input no-icon" placeholder="Provide instructions..." />
                   </div>
                   
-                  {/* NEW FEATURE: Exam Scheduling Options */}
+                  {/* Exam Scheduling Options */}
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     <div className="input-group mb-0">
                       <label className="label">Open Date (Optional)</label>
@@ -1823,9 +1952,67 @@ export default function App() {
                     <input type="checkbox" checked={editingExamDetails.isActive !== false} onChange={e => setEditingExamDetails({...editingExamDetails, isActive: e.target.checked})} className="checkbox" />
                     <div>
                       <div style={{ fontWeight: 600, color: '#0f172a' }}>Active Status</div>
-                      <div style={{ fontSize: '0.875rem', color: '#64748b' }}>If checked, students will be able to see and take this exam.</div>
+                      <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Uncheck to completely hide this exam from all students (Draft Mode).</div>
                     </div>
                   </label>
+
+                  {/* Targeted Assignment Logic */}
+                  <label className="checkbox-wrapper">
+                    <input type="checkbox" checked={editingExamDetails.assignToAll !== false} onChange={e => setEditingExamDetails({...editingExamDetails, assignToAll: e.target.checked})} className="checkbox" />
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#0f172a' }}>Assign to All Students</div>
+                      <div style={{ fontSize: '0.875rem', color: '#64748b' }}>If checked, every registered student can see this exam.</div>
+                    </div>
+                  </label>
+
+                  {editingExamDetails.assignToAll === false && (
+                     <div className="card mb-8" style={{ background: '#f8fafc', boxShadow: 'none', border: '1px solid #cbd5e1' }}>
+                       <h4 className="subtitle mb-4">Assign to Specific Students</h4>
+                       
+                       {studentGroupsList.length > 0 && (
+                         <div className="mb-4 pb-4" style={{ borderBottom: '1px solid #e2e8f0' }}>
+                           <p className="text-sm text-muted mb-2 font-bold">Quick Select by Class/Group:</p>
+                           <div className="flex gap-2 flex-wrap">
+                             {studentGroupsList.map(g => (
+                               <button type="button" key={g.id} className="btn btn-outline" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem', background: 'white' }} onClick={() => {
+                                  const newIds = new Set(editingExamDetails.assignedStudentIds || []);
+                                  (g.studentIds || []).forEach(id => newIds.add(id));
+                                  setEditingExamDetails({...editingExamDetails, assignedStudentIds: Array.from(newIds)});
+                               }}><Plus size={14}/> {g.name}</button>
+                             ))}
+                             <button type="button" className="btn btn-outline text-danger" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem', borderColor: '#fca5a5' }} onClick={() => setEditingExamDetails({...editingExamDetails, assignedStudentIds: []})}>Clear All</button>
+                           </div>
+                         </div>
+                       )}
+                       
+                       <div>
+                          <p className="text-sm text-muted mb-2 font-bold">Individual Students:</p>
+                          <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.5rem' }}>
+                             {studentProfiles.length === 0 ? (
+                               <p className="text-sm text-muted p-2">No students registered yet.</p>
+                             ) : (
+                               studentProfiles.map(student => (
+                                 <label key={student.studentId} className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer rounded" style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                   <input type="checkbox" className="checkbox m-0 shrink-0"
+                                     checked={(editingExamDetails.assignedStudentIds || []).includes(student.studentId)}
+                                     onChange={(e) => {
+                                       let current = [...(editingExamDetails.assignedStudentIds || [])];
+                                       if (e.target.checked) current.push(student.studentId);
+                                       else current = current.filter(id => id !== student.studentId);
+                                       setEditingExamDetails({...editingExamDetails, assignedStudentIds: current});
+                                     }}
+                                   />
+                                   <div>
+                                     <div className="font-bold text-sm" style={{ color: (editingExamDetails.assignedStudentIds || []).includes(student.studentId) ? '#1d4ed8' : '#0f172a' }}>{student.name}</div>
+                                     <div className="text-xs text-muted">{student.email}</div>
+                                   </div>
+                                 </label>
+                               ))
+                             )}
+                          </div>
+                       </div>
+                     </div>
+                  )}
 
                   <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
                     <button type="button" onClick={() => { setEditingExamDetails(null); setAdminView('list_exams'); }} className="btn btn-outline">Cancel</button>
@@ -1924,6 +2111,7 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* --- NEW SEARCH BAR AND FILTER --- */}
                 <div className="flex gap-4 mb-6 flex-col-sm">
                   <div className="input-group flex-1 mb-0">
                     <div className="input-wrapper">
@@ -2108,7 +2296,13 @@ export default function App() {
     }
 
     if (appState === 'home') {
-      const activeExams = exams.filter(e => e.isActive !== false);
+      const activeExams = exams.filter(e => {
+         if (e.isActive === false) return false;
+         if (e.assignToAll === false) {
+           return (e.assignedStudentIds || []).includes(activeSession?.studentId);
+         }
+         return true;
+      });
 
       return (
         <div className="min-h-screen">
