@@ -336,7 +336,7 @@ const styles = `
   .error-message { background: #fef2f2; color: #ef4444; border: 1px solid #fca5a5; padding: 1rem; border-radius: 0.75rem; font-weight: 600; text-align: center; font-size: 0.875rem; }
   .success-message { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 1rem; border-radius: 0.75rem; font-weight: 600; text-align: center; font-size: 0.875rem; }
 
-  .status-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
+  .status-badge { display: inline-block; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
   .status-active { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
   .status-draft { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
   .status-locked { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
@@ -1462,18 +1462,18 @@ export default function App() {
                   </div>
                   <div className="flex gap-2 w-full-sm" style={{ flexWrap: 'wrap' }}>
                     {exams.length === 0 && (
-                      <button onClick={seedDemoExam} className="btn btn-outline flex-1"><BookOpen size={18} /> Load Demo</button>
+                      <button onClick={seedDemoExam} className="btn btn-outline flex-1" style={{ fontSize: '14px' }}><BookOpen size={16} /> Load Demo</button>
                     )}
-                    <button onClick={() => setAdminView('manage_topics')} className="btn btn-outline flex-1">
-                      <Tag size={18} /> Manage Topics
+                    <button onClick={() => setAdminView('manage_topics')} className="btn btn-outline flex-1" style={{ fontSize: '14px' }}>
+                      <Tag size={16} /> Manage Topics
                     </button>
-                    <button onClick={() => setAdminView('manage_exam_categories')} className="btn btn-outline flex-1">
-                      <Folder size={18} /> Manage Categories
+                    <button onClick={() => setAdminView('manage_exam_categories')} className="btn btn-outline flex-1" style={{ fontSize: '14px' }}>
+                      <Folder size={16} /> Manage Categories
                     </button>
-                    <button onClick={() => { setEditingGroup(null); setNewGroupName(''); setAdminView('manage_groups'); }} className="btn btn-outline flex-1">
-                      <Users size={18} /> Manage Classes
+                    <button onClick={() => { setEditingGroup(null); setNewGroupName(''); setAdminView('manage_groups'); }} className="btn btn-outline flex-1" style={{ fontSize: '14px' }}>
+                      <Users size={16} /> Manage Classes
                     </button>
-                    <button onClick={openNewExam} className="btn btn-primary flex-1"><Plus size={18} /> Create Exam</button>
+                    <button onClick={openNewExam} className="btn btn-primary flex-1" style={{ fontSize: '14px' }}><Plus size={16} /> Create Exam</button>
                   </div>
                 </div>
                 {exams.length === 0 ? (
@@ -1511,7 +1511,7 @@ export default function App() {
                             return (
                               <div key={exam.id} className="exam-card">
                                 <div className="mb-3">
-                                  <h3 className="subtitle" style={{ margin: '0 0 0.5rem 0', wordBreak: 'break-word', lineHeight: 1.3 }}>{exam.title}</h3>
+                                  <h3 className="subtitle font-bold" style={{ margin: '0 0 0.5rem 0', wordBreak: 'break-word', lineHeight: 1.3, fontSize: '14px' }}>{exam.title}</h3>
                                   <div className="flex gap-2 items-center flex-wrap">
                                     <span className={`status-badge ${exam.isActive !== false ? 'status-active' : 'status-draft'}`}>
                                       {exam.isActive !== false ? 'Active' : 'Draft'}
@@ -2381,7 +2381,7 @@ export default function App() {
 
                               return (
                                 <div key={exam.id} className={`exam-card ${isLocked ? 'opacity-75 grayscale border-gray-200' : ''}`}>
-                                  <h3 className="subtitle" style={{ marginBottom: '0.5rem' }}>{exam.title}</h3>
+                                  <h3 className="subtitle font-bold" style={{ marginBottom: '0.5rem', fontSize: '14px' }}>{exam.title}</h3>
                                   <p className="text-muted line-clamp-3" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
                                   <div className="exam-meta">
                                     <div className="flex items-center gap-2"><LayoutGrid size={14} color="#3b82f6"/> {qCount} Questions</div>
