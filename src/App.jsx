@@ -1,4 +1,4 @@
-// Version: 2.3.0
+// Version: 2.3.1
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -1510,10 +1510,10 @@ export default function App() {
 
                             return (
                               <div key={exam.id} className="exam-card">
-                                <div className="flex justify-between items-start mb-2">
-                                  <div>
+                                <div className="flex justify-between items-start mb-4 gap-4">
+                                  <div className="flex-1" style={{ minWidth: 0 }}>
                                     <h3 className="subtitle" style={{ margin: 0, wordBreak: 'break-word' }}>{exam.title}</h3>
-                                    <div className="flex gap-2 items-center flex-wrap mt-1">
+                                    <div className="flex gap-2 items-center flex-wrap mt-2">
                                       <span className={`status-badge ${exam.isActive !== false ? 'status-active' : 'status-draft'}`}>
                                         {exam.isActive !== false ? 'Active' : 'Draft'}
                                       </span>
@@ -1527,7 +1527,7 @@ export default function App() {
                                       )}
                                     </div>
                                   </div>
-                                  <div className="flex gap-2 shrink-0 flex-wrap justify-end" style={{ maxWidth: '140px' }}>
+                                  <div className="flex gap-1 shrink-0 flex-wrap justify-end">
                                     <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
                                     <button onClick={() => { setSelectedExam(exam); setPrintMode('student'); setAppState('print_exam'); }} className="btn-icon" title="Print PDF"><Printer size={16} /></button>
                                     <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon" title="Edit Exam Details"><Edit2 size={16} /></button>
@@ -1535,7 +1535,7 @@ export default function App() {
                                     <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger" title="Delete Exam"><Trash2 size={16} /></button>
                                   </div>
                                 </div>
-                                <p className="text-muted line-clamp-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem', marginTop: '0.5rem' }}>{exam.description}</p>
+                                <p className="text-muted line-clamp-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
                                 <div className="exam-meta">
                                   <div className="flex items-center gap-2"><LayoutGrid size={14}/> {qCount} Questions</div>
                                   <div className="flex items-center gap-2"><Clock size={14}/> {exam.timeLimit} Min</div>
