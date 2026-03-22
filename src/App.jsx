@@ -1,4 +1,4 @@
-// Version: 2.1.1
+// Version: 2.2.0
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -6,7 +6,7 @@ import {
   LayoutGrid, User, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
   Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText, Shield, Key,
   Download, Upload, Image as ImageIcon, BarChart, Eye, Copy, Database, Search, Tag, Folder,
-  Shuffle, Lightbulb
+  Shuffle, Lightbulb, Printer
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
@@ -156,7 +156,9 @@ const DEFAULT_EXAM = {
   description: "This simulated examination covers core Grade 10 concepts including Algebra, Geometry, Functions, and Probability.",
   timeLimit: 30,
   isActive: true,
-  category: "Practice"
+  category: "Practice",
+  openDate: '',
+  closeDate: ''
 };
 
 const DEFAULT_QUESTIONS = [
@@ -335,11 +337,22 @@ const styles = `
   .status-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
   .status-active { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
   .status-draft { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+  .status-locked { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
   .checkbox-wrapper { display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-bottom: 1.5rem; background: #f8fafc; padding: 1rem; border-radius: 0.75rem; border: 1px solid #e2e8f0; text-align: left; }
   .checkbox { width: 1.25rem; height: 1.25rem; cursor: pointer; accent-color: #2563eb; }
 
   .stat-bar-bg { width: 100%; background: #e2e8f0; border-radius: 999px; height: 0.75rem; overflow: hidden; margin-top: 0.5rem; }
   .stat-bar-fill { height: 100%; transition: width 0.5s ease-out; }
+
+  /* --- PRINT SPECIFIC CSS --- */
+  @media print {
+    body { background: white !important; color: black !important; }
+    .no-print { display: none !important; }
+    .print-only { display: block !important; }
+    .print-container { padding: 0 !important; max-width: 100% !important; margin: 0 !important; border: none !important; box-shadow: none !important; }
+    .page-break-avoid { page-break-inside: avoid; }
+    .card, .container, .min-h-screen { box-shadow: none !important; background: transparent !important; }
+  }
 
   @media (max-width: 640px) {
     .nav { padding: 1rem; }
@@ -387,8 +400,8 @@ export default function App() {
   const [exams, setExams] = useState([]);
   const [allQuestions, setAllQuestions] = useState([]);
   const [allResults, setAllResults] = useState([]); 
-  const [topicsList, setTopicsList] = useState([]); // Tracks predefined question topics
-  const [examCategoriesList, setExamCategoriesList] = useState([]); // Tracks predefined exam categories
+  const [topicsList, setTopicsList] = useState([]); 
+  const [examCategoriesList, setExamCategoriesList] = useState([]); 
   
   const [pastResults, setPastResults] = useState([]);
   const [selectedExam, setSelectedExam] = useState(null);
@@ -429,6 +442,9 @@ export default function App() {
   const [newExamCategoryName, setNewExamCategoryName] = useState(''); 
   const [editingCategoryId, setEditingCategoryId] = useState(null);
   const [editingCategoryName, setEditingCategoryName] = useState('');
+
+  // Print States
+  const [printMode, setPrintMode] = useState('student');
 
   useEffect(() => {
     const initAuth = async () => {
@@ -498,8 +514,10 @@ export default function App() {
       if (activeSession.role === 'superadmin') {
         setAppState('superadmin');
       } else if (activeSession.role === 'teacher') {
-        setAppState('admin');
-        setAdminView('list_exams');
+        if (appState !== 'print_exam') {
+           setAppState('admin');
+           setAdminView('list_exams');
+        }
       } else {
         setAppState('home');
         setHomeView('dashboard');
@@ -813,7 +831,9 @@ export default function App() {
       description: '', 
       timeLimit: 30, 
       isActive: false, 
-      category: examCategoriesList.length > 0 ? examCategoriesList[0].name : '' 
+      category: examCategoriesList.length > 0 ? examCategoriesList[0].name : '',
+      openDate: '',
+      closeDate: ''
     });
     setAdminView('edit_exam_details');
   };
@@ -829,6 +849,8 @@ export default function App() {
       timeLimit: Number(editingExamDetails.timeLimit),
       isActive: Boolean(editingExamDetails.isActive),
       category: editingExamDetails.category || '',
+      openDate: editingExamDetails.openDate || '',
+      closeDate: editingExamDetails.closeDate || '',
       updatedAt: Date.now()
     };
 
@@ -869,6 +891,8 @@ export default function App() {
         description: examToCopy.description,
         timeLimit: examToCopy.timeLimit,
         category: examToCopy.category || '',
+        openDate: examToCopy.openDate || '',
+        closeDate: examToCopy.closeDate || '',
         createdAt: Date.now(),
         updatedAt: Date.now(),
         isActive: false // Default to draft so they can edit it first before publishing
@@ -901,10 +925,7 @@ export default function App() {
       return;
     }
     try {
-      // 1. Update the topic name in the topics collection
       await updateDoc(doc(db, `artifacts/${appId}/public/data/topics/${topicId}`), { name: newName });
-      
-      // 2. Cascade: Update all questions that used the old topic name
       const questionsToUpdate = allQuestions.filter(q => q.topic === oldName);
       for (const q of questionsToUpdate) {
         await updateDoc(doc(db, `artifacts/${appId}/public/data/questions/${q.id}`), { topic: newName });
@@ -920,10 +941,7 @@ export default function App() {
       return;
     }
     try {
-      // 1. Update the category name in the categories collection
       await updateDoc(doc(db, `artifacts/${appId}/public/data/examCategories/${categoryId}`), { name: newName });
-      
-      // 2. Cascade: Update all exams that used the old category name
       const examsToUpdate = exams.filter(e => e.category === oldName);
       for (const e of examsToUpdate) {
         await updateDoc(doc(db, `artifacts/${appId}/public/data/exams/${e.id}`), { category: newName });
@@ -958,33 +976,21 @@ export default function App() {
     let uploadedExplanationImageUrl = editingQuestion.explanationImageUrl || '';
 
     try {
-      // Cloudinary upload for main question image
       if (imageFile) {
         const formData = new FormData();
         formData.append('file', imageFile);
         formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
-          method: 'POST',
-          body: formData
-        });
-        
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: formData });
         if (!uploadRes.ok) throw new Error("Failed to upload question image.");
         const uploadData = await uploadRes.json();
         uploadedImageUrl = uploadData.secure_url;
       }
 
-      // Cloudinary upload for explanation image
       if (explanationImageFile) {
         const explanationFormData = new FormData();
         explanationFormData.append('file', explanationImageFile);
         explanationFormData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-        const explanationUploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
-          method: 'POST',
-          body: explanationFormData
-        });
-        
+        const explanationUploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: 'POST', body: explanationFormData });
         if (!explanationUploadRes.ok) throw new Error("Failed to upload explanation image.");
         const explanationUploadData = await explanationUploadRes.json();
         uploadedExplanationImageUrl = explanationUploadData.secure_url;
@@ -1150,6 +1156,67 @@ export default function App() {
         <div className="min-h-screen flex items-center justify-center">
           <p className="text-muted font-bold">Loading Platform...</p>
         </div>
+      );
+    }
+
+    if (appState === 'print_exam' && selectedExam) {
+      const qs = getExamQuestionsFromDB();
+      return (
+         <div className="bg-white min-h-screen text-black print-container" style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', fontFamily: 'serif' }}>
+             <div className="no-print flex justify-between mb-8 bg-slate-100 p-4 rounded-lg items-center border border-slate-200 shadow-sm">
+                 <button onClick={() => { setAppState('admin'); setSelectedExam(null); }} className="btn btn-outline" style={{ background: 'white' }}><ChevronLeft size={18}/> Back</button>
+                 <div className="flex gap-4 items-center">
+                     <select value={printMode} onChange={e => setPrintMode(e.target.value)} className="input no-icon w-auto" style={{ background: 'white', padding: '0.5rem 1rem' }}>
+                         <option value="student">Student Copy (Questions Only)</option>
+                         <option value="key">Answer Key (Highlights + Explanations)</option>
+                     </select>
+                     <button onClick={() => window.print()} className="btn btn-primary"><Printer size={18}/> Print PDF</button>
+                 </div>
+             </div>
+             
+             {/* Printable Header */}
+             <div className="pb-4 mb-8" style={{ borderBottom: '2px solid black' }}>
+                 <h1 className="text-3xl font-bold mb-4">{selectedExam.title} {printMode === 'key' && <span style={{ color: '#dc2626' }}>- ANSWER KEY</span>}</h1>
+                 <div className="flex justify-between font-bold" style={{ fontSize: '1.1rem' }}>
+                     <div>Name: __________________________________</div>
+                     <div>Date: _______________</div>
+                     <div>Score: _______ / {qs.length}</div>
+                 </div>
+             </div>
+             
+             {/* Printable Body */}
+             <div>
+                 {qs.map((q, idx) => (
+                     <div key={q.id} className="mb-8 page-break-avoid">
+                         <div className="flex gap-3 mb-3">
+                             <span className="font-bold text-lg">{idx + 1}.</span>
+                             <div className="flex-1 text-lg"><LatexText text={q.text} /></div>
+                         </div>
+                         {q.imageUrl && <img src={q.imageUrl} alt="Question" className="mb-4" style={{ maxHeight: '250px', objectFit: 'contain' }} />}
+                         
+                         <div className="grid grid-cols-2 gap-4 pl-8 mb-2">
+                             {q.options.map(opt => {
+                                 const isCorrect = printMode === 'key' && q.correctId === opt.id;
+                                 return (
+                                     <div key={opt.id} className="flex gap-3 items-start">
+                                         <span className={`font-bold ${isCorrect ? 'text-blue-700' : ''}`} style={isCorrect ? { backgroundColor: '#dbeafe', padding: '0.1rem 0.4rem', borderRadius: '0.25rem', border: '1px solid #bfdbfe' } : {}}>{opt.id})</span>
+                                         <span className={isCorrect ? 'font-bold text-blue-800' : ''}><LatexText text={opt.text} /></span>
+                                     </div>
+                                 );
+                             })}
+                         </div>
+                         
+                         {printMode === 'key' && (
+                             <div className="mt-4 pl-8 pt-3 pb-3 pr-4 text-sm" style={{ backgroundColor: '#f8fafc', borderLeft: '4px solid #3b82f6' }}>
+                                 <strong style={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1e3a8a', display: 'block', marginBottom: '0.25rem' }}>Explanation:</strong>
+                                 <div style={{ color: '#334155' }}><LatexText text={q.explanation || 'No detailed explanation provided.'} /></div>
+                                 {q.explanationImageUrl && <img src={q.explanationImageUrl} alt="Explanation Graphic" style={{ maxHeight: '150px', objectFit: 'contain', marginTop: '0.5rem' }} />}
+                             </div>
+                         )}
+                     </div>
+                 ))}
+             </div>
+         </div>
       );
     }
 
@@ -1410,23 +1477,41 @@ export default function App() {
                         <div className="grid grid-cols-2">
                           {groupedExams[category].map(exam => {
                             const qCount = allQuestions.filter(q => q.examId === exam.id).length;
+                            
+                            // Check Scheduling status for Teacher display
+                            let scheduleStatus = "";
+                            const now = new Date().getTime();
+                            if (exam.openDate && new Date(exam.openDate).getTime() > now) {
+                              scheduleStatus = "Opens Later";
+                            } else if (exam.closeDate && new Date(exam.closeDate).getTime() < now) {
+                              scheduleStatus = "Closed";
+                            }
+
                             return (
                               <div key={exam.id} className="exam-card">
                                 <div className="flex justify-between items-start mb-2">
                                   <div>
                                     <h3 className="subtitle" style={{ margin: 0, wordBreak: 'break-word' }}>{exam.title}</h3>
-                                    <span className={`status-badge ${exam.isActive !== false ? 'status-active' : 'status-draft'}`}>
-                                      {exam.isActive !== false ? 'Active (Visible)' : 'Draft (Hidden)'}
-                                    </span>
+                                    <div className="flex gap-2 items-center flex-wrap">
+                                      <span className={`status-badge ${exam.isActive !== false ? 'status-active' : 'status-draft'}`}>
+                                        {exam.isActive !== false ? 'Active (Visible)' : 'Draft (Hidden)'}
+                                      </span>
+                                      {scheduleStatus && (
+                                        <span className="status-badge" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+                                          <Clock size={10} style={{ display: 'inline', marginRight: '2px', marginBottom: '2px' }}/> {scheduleStatus}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="flex gap-2 shrink-0">
+                                  <div className="flex gap-2 shrink-0 flex-wrap justify-end" style={{ maxWidth: '140px' }}>
                                     <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
+                                    <button onClick={() => { setSelectedExam(exam); setPrintMode('student'); setAppState('print_exam'); }} className="btn-icon" title="Print PDF"><Printer size={16} /></button>
                                     <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon" title="Edit Exam Details"><Edit2 size={16} /></button>
                                     <button onClick={() => duplicateExam(exam)} className="btn-icon" title="Duplicate Exam"><Copy size={16} /></button>
                                     <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger" title="Delete Exam"><Trash2 size={16} /></button>
                                   </div>
                                 </div>
-                                <p className="text-muted line-clamp-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
+                                <p className="text-muted line-clamp-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem', marginTop: '0.5rem' }}>{exam.description}</p>
                                 <div className="exam-meta">
                                   <div className="flex items-center gap-2"><LayoutGrid size={14}/> {qCount} Questions</div>
                                   <div className="flex items-center gap-2"><Clock size={14}/> {exam.timeLimit} Min</div>
@@ -1716,6 +1801,19 @@ export default function App() {
                     <label className="label">Description</label>
                     <textarea required rows={3} value={editingExamDetails.description} onChange={e => setEditingExamDetails({...editingExamDetails, description: e.target.value})} className="input no-icon" placeholder="Provide instructions..." />
                   </div>
+                  
+                  {/* NEW FEATURE: Exam Scheduling Options */}
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="input-group mb-0">
+                      <label className="label">Open Date (Optional)</label>
+                      <input type="datetime-local" value={editingExamDetails.openDate || ''} onChange={e => setEditingExamDetails({...editingExamDetails, openDate: e.target.value})} className="input no-icon" style={{ paddingLeft: '1rem', fontSize: '0.875rem' }} />
+                    </div>
+                    <div className="input-group mb-0">
+                      <label className="label">Close Date (Optional)</label>
+                      <input type="datetime-local" value={editingExamDetails.closeDate || ''} onChange={e => setEditingExamDetails({...editingExamDetails, closeDate: e.target.value})} className="input no-icon" style={{ paddingLeft: '1rem', fontSize: '0.875rem' }} />
+                    </div>
+                  </div>
+
                   <div className="input-group mb-8">
                     <label className="label">Time Limit (Minutes)</label>
                     <input required type="number" min="1" max="300" value={editingExamDetails.timeLimit} onChange={e => setEditingExamDetails({...editingExamDetails, timeLimit: e.target.value})} className="input no-icon" />
@@ -1826,7 +1924,6 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* --- NEW SEARCH BAR AND FILTER --- */}
                 <div className="flex gap-4 mb-6 flex-col-sm">
                   <div className="input-group flex-1 mb-0">
                     <div className="input-wrapper">
@@ -2078,15 +2175,31 @@ export default function App() {
                           <div className="grid grid-cols-3">
                             {groupedActiveExams[category].map(exam => {
                               const qCount = allQuestions.filter(q => q.examId === exam.id).length;
+                              const now = new Date().getTime();
+                              let isLocked = false;
+                              let lockReason = "";
+                              
+                              if (exam.openDate && new Date(exam.openDate).getTime() > now) {
+                                isLocked = true;
+                                lockReason = `Opens ${new Date(exam.openDate).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+                              } else if (exam.closeDate && new Date(exam.closeDate).getTime() < now) {
+                                isLocked = true;
+                                lockReason = `Closed ${new Date(exam.closeDate).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+                              }
+
                               return (
-                                <div key={exam.id} className="exam-card">
+                                <div key={exam.id} className={`exam-card ${isLocked ? 'opacity-75 grayscale border-gray-200' : ''}`}>
                                   <h3 className="subtitle" style={{ marginBottom: '0.5rem' }}>{exam.title}</h3>
                                   <p className="text-muted line-clamp-3" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
                                   <div className="exam-meta">
                                     <div className="flex items-center gap-2"><LayoutGrid size={14} color="#3b82f6"/> {qCount} Questions</div>
                                     <div className="flex items-center gap-2"><Clock size={14} color="#3b82f6"/> {exam.timeLimit} Min</div>
                                   </div>
-                                  <button onClick={() => selectExamForTaking(exam)} className="btn btn-outline w-full" style={{ borderColor: '#bfdbfe', color: '#1d4ed8' }}>Select Exam <ChevronRight size={16}/></button>
+                                  {isLocked ? (
+                                    <button disabled className="btn btn-outline w-full status-locked"><Lock size={16}/> {lockReason}</button>
+                                  ) : (
+                                    <button onClick={() => selectExamForTaking(exam)} className="btn btn-outline w-full" style={{ borderColor: '#bfdbfe', color: '#1d4ed8' }}>Select Exam <ChevronRight size={16}/></button>
+                                  )}
                                 </div>
                               );
                             })}
