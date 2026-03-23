@@ -1,4 +1,4 @@
-// Version: 2.3.3
+// Version: 2.4.0
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -6,10 +6,13 @@ import {
   LayoutGrid, User, Users, Lock, Mail, LogOut, ArrowRight, History, Calendar, 
   Award, Settings, Plus, Trash2, Edit2, Save, BookOpen, FileText, Shield, Key,
   Download, Upload, Image as ImageIcon, BarChart, Eye, Copy, Database, Search, Tag, Folder,
-  Shuffle, Lightbulb, Printer
+  Shuffle, Lightbulb, Printer, UserPlus, UserCheck, UserX
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { 
+  getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut 
+} from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 // --- KATEX MATH RENDERER COMPONENT ---
@@ -123,7 +126,7 @@ const MathLiveInput = ({ value, onChange, placeholder }) => {
   );
 };
 
-// --- SECURITY UTILITY: PASSWORD HASHING ---
+// --- SECURITY UTILITY: PASSWORD HASHING (Legacy & Admin/Teacher) ---
 const hashPassword = async (password) => {
   const msgBuffer = new TextEncoder().encode(password);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -404,7 +407,7 @@ export default function App() {
   const [allResults, setAllResults] = useState([]); 
   const [topicsList, setTopicsList] = useState([]); 
   const [examCategoriesList, setExamCategoriesList] = useState([]); 
-  const [studentGroupsList, setStudentGroupsList] = useState([]); // NEW: Tracks student groups
+  const [studentGroupsList, setStudentGroupsList] = useState([]); 
   
   const [pastResults, setPastResults] = useState([]);
   const [selectedExam, setSelectedExam] = useState(null);
@@ -601,16 +604,49 @@ export default function App() {
 
   const currentQuestions = getCurrentExamQuestions();
 
+  const handleStudentPostLogin = async (fbUser, email, isMigrating = false) => {
+    const profile = studentProfiles.find(s => s.email.toLowerCase() === email.toLowerCase());
+    if (!profile) {
+       setAuthError("User profile not found in database.");
+       await signOut(auth);
+       await signInAnonymously(auth); // Restore read access
+       return;
+    }
+    
+    // Treat old users missing a status as 'active' for backwards compatibility
+    const currentStatus = profile.status || 'active';
+
+    if (currentStatus === 'pending_approval') {
+       setAuthError("Your account is pending teacher approval.");
+       await signOut(auth);
+       await signInAnonymously(auth);
+       return;
+    }
+    
+    // Email verification check (bypassed if legacy migrated)
+    if (!fbUser.emailVerified && !profile.legacyMigrated) {
+       setAuthError("Please verify your email address. Check your inbox.");
+       await signOut(auth);
+       await signInAnonymously(auth);
+       return;
+    }
+    
+    // Success!
+    const session = { role: 'student', name: profile.name, email: email, studentId: profile.studentId, userId: profile.id };
+    localStorage.setItem('olyst_session', JSON.stringify(session));
+    setActiveSession(session);
+  };
+
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
     setIsSubmittingAuth(true);
 
     const userEmail = String(authForm.email || '').toLowerCase().trim();
-    const userPasswordHash = await hashPassword(authForm.password || '');
 
     try {
       if (loginMode === 'admin') {
+        const userPasswordHash = await hashPassword(authForm.password || '');
         const adminUser = adminsList.find(a => String(a.email || '').toLowerCase().trim() === userEmail && String(a.password || '').trim() === userPasswordHash);
         if (adminUser) {
           const session = { role: 'superadmin', name: 'System Admin', email: userEmail, userId: adminUser.id };
@@ -620,6 +656,7 @@ export default function App() {
           setAuthError("Invalid admin credentials. Please check your system admin email and password.");
         }
       } else if (loginMode === 'teacher') {
+        const userPasswordHash = await hashPassword(authForm.password || '');
         const teacher = teachersList.find(t => String(t.email || '').toLowerCase().trim() === userEmail && String(t.password || '').trim() === userPasswordHash);
         if (teacher) {
           const session = { role: 'teacher', name: teacher.name || 'Teacher', email: userEmail, studentId: 'teacher', userId: teacher.id };
@@ -629,27 +666,61 @@ export default function App() {
           setAuthError("Invalid teacher credentials. Please verify your email and password or contact the system admin.");
         }
       } else {
+        // STUDENT LOGIN / REGISTRATION FLOW
         if (isRegistering) {
           const existingStudent = studentProfiles.find(s => String(s.email || '').toLowerCase().trim() === userEmail);
           if (existingStudent) {
             setAuthError("This email is already registered. Please click 'Sign in' instead.");
           } else {
+            // New Firebase Auth Registration
+            const userCred = await createUserWithEmailAndPassword(auth, userEmail, authForm.password);
+            await sendEmailVerification(userCred.user);
+            
             const newStudentId = `stu_${Date.now()}`;
-            const newDocRef = await addDoc(collection(db, `artifacts/${appId}/public/data/studentProfiles`), {
-              email: userEmail, password: userPasswordHash, name: authForm.name, studentId: newStudentId, createdAt: Date.now()
+            await addDoc(collection(db, `artifacts/${appId}/public/data/studentProfiles`), {
+              email: userEmail, 
+              name: authForm.name, 
+              studentId: newStudentId, 
+              status: 'pending_approval',
+              legacyMigrated: false,
+              createdAt: Date.now()
             });
-            const session = { role: 'student', name: authForm.name, email: userEmail, studentId: newStudentId, userId: newDocRef.id };
-            localStorage.setItem('olyst_session', JSON.stringify(session));
-            setActiveSession(session);
+            
+            setAuthSuccess("Registration successful! Please check your email to verify your address, then wait for teacher approval.");
+            setIsRegistering(false);
+            setAuthForm({ name: '', email: '', password: '' });
+            await signOut(auth);
+            await signInAnonymously(auth); // Restore read access
           }
         } else {
-          const student = studentProfiles.find(s => String(s.email || '').toLowerCase().trim() === userEmail && String(s.password || '').trim() === userPasswordHash);
-          if (student) {
-            const session = { role: 'student', name: student.name, email: userEmail, studentId: student.studentId, userId: student.id };
-            localStorage.setItem('olyst_session', JSON.stringify(session));
-            setActiveSession(session);
-          } else {
-            setAuthError("Invalid student credentials. Please verify your email and password.");
+          // Standard Student Login
+          try {
+            const userCredential = await signInWithEmailAndPassword(auth, userEmail, authForm.password);
+            await handleStudentPostLogin(userCredential.user, userEmail);
+          } catch (firebaseErr) {
+            // --- LAZY MIGRATION BLOCK (Delete in future once all students have logged in once) ---
+            const hashedPass = await hashPassword(authForm.password);
+            const legacyStudent = studentProfiles.find(s => String(s.email || '').toLowerCase() === userEmail && s.password === hashedPass);
+            
+            if (legacyStudent) {
+              try {
+                // Quietly create their official Firebase account with the password they just typed
+                const newUserCred = await createUserWithEmailAndPassword(auth, userEmail, authForm.password);
+                
+                // Update their Firestore doc to mark them as migrated and active
+                const docRef = doc(db, `artifacts/${appId}/public/data/studentProfiles/${legacyStudent.id}`);
+                await updateDoc(docRef, { status: 'active', legacyMigrated: true });
+                
+                // Log them in immediately
+                await handleStudentPostLogin(newUserCred.user, userEmail, true);
+              } catch (migErr) {
+                 console.error("Migration Error:", migErr);
+                 setAuthError("Account migration failed. Please contact your teacher.");
+              }
+            } else {
+               setAuthError("Invalid student credentials. Please verify your email and password.");
+            }
+            // --- END LAZY MIGRATION BLOCK ---
           }
         }
       }
@@ -672,6 +743,7 @@ export default function App() {
     setHomeView('dashboard');
     setAdminView('list_exams');
     setAppState('login');
+    signOut(auth).then(() => signInAnonymously(auth));
   };
 
   const handleRegisterTeacher = async (e) => {
@@ -1262,6 +1334,11 @@ export default function App() {
                   {authError}
                 </div>
               )}
+              {authSuccess && (
+                <div className="success-message mb-6">
+                  {authSuccess}
+                </div>
+              )}
 
               <form onSubmit={handleAuthSubmit}>
                 <h2 className="subtitle text-center mb-6">
@@ -1301,7 +1378,7 @@ export default function App() {
 
               {loginMode === 'student' && (
                 <div className="text-center mt-6">
-                  <button type="button" onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); setAuthForm({ name: '', email: '', password: '' }); }} className="btn-link">
+                  <button type="button" onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); setAuthSuccess(''); setAuthForm({ name: '', email: '', password: '' }); }} className="btn-link">
                     {isRegistering ? "Already have an account? Sign in" : "Don't have an account? Register"}
                   </button>
                 </div>
@@ -1407,6 +1484,8 @@ export default function App() {
     }
 
     if (appState === 'admin') {
+      const pendingApprovalCount = studentProfiles.filter(s => s.status === 'pending_approval').length;
+
       return (
         <div className="min-h-screen">
           <nav className="nav dark">
@@ -1473,6 +1552,14 @@ export default function App() {
                     <button onClick={() => { setEditingGroup(null); setNewGroupName(''); setAdminView('manage_groups'); }} className="btn btn-outline flex-1" style={{ fontSize: '14px' }}>
                       <Users size={16} /> Manage Classes
                     </button>
+                    <button onClick={() => setAdminView('manage_students')} className="btn btn-outline flex-1 relative" style={{ fontSize: '14px' }}>
+                      <UserPlus size={16} /> Manage Students
+                      {pendingApprovalCount > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow-sm">
+                          {pendingApprovalCount}
+                        </span>
+                      )}
+                    </button>
                     <button onClick={openNewExam} className="btn btn-primary flex-1" style={{ fontSize: '14px' }}><Plus size={16} /> Create Exam</button>
                   </div>
                 </div>
@@ -1510,30 +1597,32 @@ export default function App() {
 
                             return (
                               <div key={exam.id} className="exam-card">
-                                <div className="mb-3">
-                                  <h3 className="subtitle font-bold" style={{ margin: '0 0 0.5rem 0', wordBreak: 'break-word', lineHeight: 1.3, fontSize: '14px' }}>{exam.title}</h3>
-                                  <div className="flex gap-2 items-center flex-wrap">
-                                    <span className={`status-badge ${exam.isActive !== false ? 'status-active' : 'status-draft'}`}>
-                                      {exam.isActive !== false ? 'Active' : 'Draft'}
-                                    </span>
-                                    <span className="status-badge" style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' }}>
-                                      {exam.assignToAll !== false ? 'All Students' : `${(exam.assignedStudentIds || []).length} Assigned`}
-                                    </span>
-                                    {scheduleStatus && (
-                                      <span className="status-badge" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
-                                        <Clock size={10} style={{ display: 'inline', marginRight: '2px', marginBottom: '2px' }}/> {scheduleStatus}
+                                <div className="flex justify-between items-start mb-4 gap-4">
+                                  <div className="flex-1" style={{ minWidth: 0 }}>
+                                    <h3 className="subtitle font-bold" style={{ margin: '0 0 0.5rem 0', wordBreak: 'break-word', lineHeight: 1.3, fontSize: '14px' }}>{exam.title}</h3>
+                                    <div className="flex gap-2 items-center flex-wrap mt-2">
+                                      <span className={`status-badge ${exam.isActive !== false ? 'status-active' : 'status-draft'}`}>
+                                        {exam.isActive !== false ? 'Active' : 'Draft'}
                                       </span>
-                                    )}
+                                      <span className="status-badge" style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' }}>
+                                        {exam.assignToAll !== false ? 'All Students' : `${(exam.assignedStudentIds || []).length} Assigned`}
+                                      </span>
+                                      {scheduleStatus && (
+                                        <span className="status-badge" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+                                          <Clock size={10} style={{ display: 'inline', marginRight: '2px', marginBottom: '2px' }}/> {scheduleStatus}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-1 shrink-0 flex-wrap justify-end">
+                                    <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
+                                    <button onClick={() => { setSelectedExam(exam); setPrintMode('student'); setAppState('print_exam'); }} className="btn-icon" title="Print PDF"><Printer size={16} /></button>
+                                    <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon" title="Edit Exam Details"><Edit2 size={16} /></button>
+                                    <button onClick={() => duplicateExam(exam)} className="btn-icon" title="Duplicate Exam"><Copy size={16} /></button>
+                                    <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger" title="Delete Exam"><Trash2 size={16} /></button>
                                   </div>
                                 </div>
-                                <div className="flex gap-1 flex-wrap mb-2 pb-3" style={{ borderBottom: '1px solid #e2e8f0' }}>
-                                  <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
-                                  <button onClick={() => { setSelectedExam(exam); setPrintMode('student'); setAppState('print_exam'); }} className="btn-icon" title="Print PDF"><Printer size={16} /></button>
-                                  <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon" title="Edit Exam Details"><Edit2 size={16} /></button>
-                                  <button onClick={() => duplicateExam(exam)} className="btn-icon" title="Duplicate Exam"><Copy size={16} /></button>
-                                  <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger" title="Delete Exam"><Trash2 size={16} /></button>
-                                </div>
-                                <p className="text-muted line-clamp-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem', marginTop: '0.5rem' }}>{exam.description}</p>
+                                <p className="text-muted line-clamp-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
                                 <div className="exam-meta">
                                   <div className="flex items-center gap-2"><LayoutGrid size={14}/> {qCount} Questions</div>
                                   <div className="flex items-center gap-2"><Clock size={14}/> {exam.timeLimit} Min</div>
@@ -1548,6 +1637,73 @@ export default function App() {
                   })()
                 )}
               </>
+            )}
+
+            {/* --- NEW STUDENT MANAGEMENT TAB --- */}
+            {adminView === 'manage_students' && (
+              <div className="container-sm mx-auto" style={{ margin: '0 auto', maxWidth: '40rem' }}>
+                 <button onClick={() => { setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Dashboard</button>
+                 <div className="mb-6">
+                   <h1 className="title">Manage Students</h1>
+                   <p className="text-muted">Approve new registrations and manage student access.</p>
+                 </div>
+
+                 {/* Pending Approvals Section */}
+                 <div className="card mb-8" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div className="card-header" style={{ margin: 0, borderRadius: 0, padding: '1rem 1.5rem', textAlign: 'left', background: '#fffbeb', borderBottom: '1px solid #fde68a', color: '#b45309' }}>
+                      <h3 className="subtitle flex items-center gap-2 m-0"><UserPlus size={20}/> Pending Approvals ({pendingApprovalCount})</h3>
+                    </div>
+                    {pendingApprovalCount === 0 ? (
+                      <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No students are waiting for approval.</div>
+                    ) : (
+                      studentProfiles.filter(s => s.status === 'pending_approval').map(student => (
+                        <div key={student.id} className="admin-list-item flex justify-between items-center" style={{ borderBottom: '1px solid #fde68a', background: '#fefbf3' }}>
+                          <div>
+                            <span className="font-bold block">{student.name}</span>
+                            <span className="text-sm text-muted">{student.email}</span>
+                          </div>
+                          <div className="flex gap-2 shrink-0">
+                            <button onClick={async () => {
+                               await updateDoc(doc(db, `artifacts/${appId}/public/data/studentProfiles/${student.id}`), { status: 'active' });
+                            }} className="btn btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}><UserCheck size={16}/> Approve</button>
+                            <button onClick={async () => {
+                               if(window.confirm(`Are you sure you want to completely delete the registration request for ${student.name}?`)) {
+                                 await deleteDoc(doc(db, `artifacts/${appId}/public/data/studentProfiles/${student.id}`));
+                               }
+                            }} className="btn btn-outline text-danger" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', borderColor: '#fca5a5' }}><UserX size={16}/> Reject</button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                 </div>
+
+                 {/* Active Students Section */}
+                 <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div className="card-header" style={{ margin: 0, borderRadius: 0, padding: '1rem 1.5rem', textAlign: 'left', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#0f172a' }}>
+                      <h3 className="subtitle flex items-center gap-2 m-0"><Users size={20}/> Active Students</h3>
+                    </div>
+                    {studentProfiles.filter(s => s.status !== 'pending_approval').length === 0 ? (
+                      <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No active students found.</div>
+                    ) : (
+                      studentProfiles.filter(s => s.status !== 'pending_approval').map(student => (
+                        <div key={student.id} className="admin-list-item flex justify-between items-center">
+                          <div>
+                            <span className="font-bold block flex items-center gap-2">
+                               {student.name}
+                               {student.legacyMigrated && <span className="status-badge" style={{ fontSize: '9px', background: '#eff6ff', color: '#1e3a8a', borderColor: '#bfdbfe' }}>Legacy</span>}
+                            </span>
+                            <span className="text-sm text-muted">{student.email}</span>
+                          </div>
+                          <button onClick={async () => {
+                               if(window.confirm(`Revoke access for ${student.name}? They will need to be re-approved.`)) {
+                                 await updateDoc(doc(db, `artifacts/${appId}/public/data/studentProfiles/${student.id}`), { status: 'pending_approval' });
+                               }
+                          }} className="btn-icon btn-icon-danger" title="Revoke Access"><UserX size={18}/></button>
+                        </div>
+                      ))
+                    )}
+                 </div>
+              </div>
             )}
 
             {adminView === 'manage_groups' && (
@@ -2381,7 +2537,7 @@ export default function App() {
 
                               return (
                                 <div key={exam.id} className={`exam-card ${isLocked ? 'opacity-75 grayscale border-gray-200' : ''}`}>
-                                  <h3 className="subtitle font-bold" style={{ marginBottom: '0.5rem', fontSize: '14px' }}>{exam.title}</h3>
+                                  <h3 className="subtitle" style={{ marginBottom: '0.5rem' }}>{exam.title}</h3>
                                   <p className="text-muted line-clamp-3" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
                                   <div className="exam-meta">
                                     <div className="flex items-center gap-2"><LayoutGrid size={14} color="#3b82f6"/> {qCount} Questions</div>
