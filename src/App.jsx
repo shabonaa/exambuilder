@@ -1437,4 +1437,1451 @@ export default function App() {
                       <label className="label">Teacher Email</label>
                       <div className="input-wrapper">
                         <Mail size={18} className="input-icon" />
-                        <input type="email" required value={newTeacherForm.
+                        <input type="email" required value={newTeacherForm.email} onChange={(e) => setNewTeacherForm({...newTeacherForm, email: e.target.value})} className="input" placeholder="teacher@school.edu" />
+                      </div>
+                    </div>
+                    <div className="input-group mb-6">
+                      <label className="label">Temporary Password</label>
+                      <div className="input-wrapper">
+                        <Lock size={18} className="input-icon" />
+                        <input type="text" required value={newTeacherForm.password} onChange={(e) => setNewTeacherForm({...newTeacherForm, password: e.target.value})} className="input" placeholder="Assign a password" />
+                      </div>
+                    </div>
+                    <button type="submit" className="btn btn-primary w-full"><Plus size={18} /> Create Teacher Account</button>
+                 </form>
+               </div>
+
+               <div className="card">
+                 <h2 className="title mb-6 flex items-center gap-3"><Key size={24} color="#2563eb" /> Password Hash Generator</h2>
+                 <p className="text-muted mb-4">Generate exact SHA-256 hashes for manual database entry.</p>
+                 <div className="input-group mb-4">
+                   <div className="input-wrapper">
+                     <Lock size={18} className="input-icon" />
+                     <input type="text" value={hashInput} onChange={async (e) => {
+                       setHashInput(e.target.value);
+                       if(e.target.value) setGeneratedHash(await hashPassword(e.target.value));
+                       else setGeneratedHash('');
+                     }} className="input" placeholder="Type password here..." />
+                   </div>
+                 </div>
+                 {generatedHash && (
+                   <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '0.5rem', wordBreak: 'break-all', fontFamily: 'monospace', fontSize: '0.875rem', border: '1px solid #cbd5e1' }}>
+                     {generatedHash}
+                   </div>
+                 )}
+               </div>
+
+               <div className="card col-span-2" style={{ padding: 0, overflow: 'hidden' }}>
+                 <div className="card-header" style={{ margin: 0, borderRadius: 0, padding: '1.5rem', textAlign: 'left', background: '#f8fafc', color: '#0f172a', borderBottom: '1px solid #e2e8f0' }}>
+                   <h2 className="subtitle" style={{ margin: 0 }}>Registered Teachers</h2>
+                 </div>
+                 <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                   {teachersList.length === 0 ? (
+                     <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No teachers registered yet.</div>
+                   ) : (
+                     teachersList.map((teacher, idx) => (
+                       <div key={teacher.id || idx} className="admin-list-item" style={{ alignItems: 'center' }}>
+                         <div className="flex-1">
+                           <div className="font-bold">{teacher.name || 'Unnamed Teacher'}</div>
+                           <div className="text-muted" style={{ fontSize: '0.875rem' }}>{teacher.email}</div>
+                         </div>
+                         <div className="flex items-center gap-3">
+                           <div className="badge">Active</div>
+                           <button onClick={() => handleDeleteTeacher(teacher.id)} className="btn-icon btn-icon-danger" title="Delete Teacher"><Trash2 size={18} /></button>
+                         </div>
+                       </div>
+                     ))
+                   )}
+                 </div>
+               </div>
+
+             </div>
+          </main>
+        </div>
+      );
+    }
+
+    if (appState === 'admin') {
+      const pendingApprovalCount = studentProfiles.filter(s => s.status === 'pending_approval').length;
+
+      return (
+        <div className="min-h-screen flex-col">
+          <nav className="nav dark shrink-0">
+            <div className="nav-brand"><Settings size={24} color="#60a5fa" /> <span className="hidden-sm">Exam Platform Teacher Portal</span></div>
+            <div className="flex items-center gap-4">
+              <span className="badge hidden-sm">Teacher: {activeSession?.name}</span>
+              <button onClick={() => { setAuthError(''); setAuthSuccess(''); setAdminView('change_password'); }} className="btn" style={{ padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.1)', color: 'white' }}>
+                <Key size={16} /> <span className="hidden-sm">Password</span>
+              </button>
+              <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }}><LogOut size={16} /> <span className="hidden-sm">Logout</span></button>
+            </div>
+          </nav>
+          
+          <div className="admin-layout">
+            <aside className="sidebar">
+              <button onClick={openNewExam} className="create-exam-btn"><Plus size={16} /> Create Exam</button>
+              
+              <div className="menu-label">Menu</div>
+              <button onClick={() => setAdminView('list_exams')} className={`sidebar-btn ${adminView === 'list_exams' ? 'active' : ''}`}><LayoutGrid size={18}/> Dashboard</button>
+              <button onClick={() => setAdminView('manage_topics')} className={`sidebar-btn ${adminView === 'manage_topics' ? 'active' : ''}`}><Tag size={18} /> Topics</button>
+              <button onClick={() => setAdminView('manage_exam_categories')} className={`sidebar-btn ${adminView === 'manage_exam_categories' ? 'active' : ''}`}><Folder size={18} /> Categories</button>
+              <button onClick={() => { setEditingGroup(null); setNewGroupName(''); setAdminView('manage_groups'); }} className={`sidebar-btn ${adminView === 'manage_groups' ? 'active' : ''}`}><Users size={18} /> Classes</button>
+              <button onClick={() => setAdminView('manage_students')} className={`sidebar-btn ${adminView === 'manage_students' ? 'active' : ''}`}>
+                <UserPlus size={18} /> Students
+                {pendingApprovalCount > 0 && (
+                  <span className="bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold shadow-sm shrink-0" style={{ marginLeft: 'auto' }}>
+                    {pendingApprovalCount}
+                  </span>
+                )}
+              </button>
+            </aside>
+            
+            <main className="flex-1 overflow-y-auto bg-slate-50">
+              <div className="container">
+                {adminView === 'change_password' && (
+                  <div className="card container-sm" style={{ padding: 0, overflow: 'hidden', margin: '0 auto' }}>
+                    <div className="nav">
+                      <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Key size={20} color="#2563eb" /> Update Password
+                      </h2>
+                      <button onClick={() => setAdminView('list_exams')} className="btn-icon"><X size={24} /></button>
+                    </div>
+                    <form onSubmit={handleChangePassword} style={{ padding: '2rem' }}>
+                      {authError && <div className="error-message mb-4">{authError}</div>}
+                      {authSuccess && <div className="success-message mb-4">{authSuccess}</div>}
+                      <div className="input-group">
+                        <label className="label">New Password</label>
+                        <div className="input-wrapper">
+                          <Lock size={18} className="input-icon" />
+                          <input type="password" required minLength="6" value={passwordForm.newPassword} onChange={e => setPasswordForm({...passwordForm, newPassword: e.target.value})} className="input" placeholder="Enter new password" />
+                        </div>
+                      </div>
+                      <div className="input-group mb-8">
+                        <label className="label">Confirm New Password</label>
+                        <div className="input-wrapper">
+                          <Lock size={18} className="input-icon" />
+                          <input type="password" required minLength="6" value={passwordForm.confirmPassword} onChange={e => setPasswordForm({...passwordForm, confirmPassword: e.target.value})} className="input" placeholder="Confirm new password" />
+                        </div>
+                      </div>
+                      <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
+                        <button type="button" onClick={() => setAdminView('list_exams')} className="btn btn-outline">Cancel</button>
+                        <button type="submit" className="btn btn-primary"><Save size={18} /> Update Password</button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {adminView === 'list_exams' && (
+                  <>
+                    <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
+                      <div>
+                        <h1 className="title">Exam Dashboard</h1>
+                        <p className="text-muted">Create and manage your assessments.</p>
+                      </div>
+                      {exams.length === 0 && (
+                        <button onClick={seedDemoExam} className="btn btn-outline" style={{ fontSize: '14px' }}><BookOpen size={16} /> Load Demo</button>
+                      )}
+                    </div>
+                    {exams.length === 0 ? (
+                      <div className="empty-state">
+                        <FileText size={48} className="text-muted" style={{ margin: '0 auto 1rem auto', opacity: 0.5 }} />
+                        <h3 className="subtitle">No exams found</h3>
+                        <p className="text-muted mb-6">Start building your first exam to evaluate students.</p>
+                        <button onClick={openNewExam} className="btn btn-outline">Create Exam</button>
+                      </div>
+                    ) : (
+                      (() => {
+                        const groupedExams = (Array.isArray(exams) ? exams : []).reduce((acc, exam) => {
+                          const cat = exam.category || 'Uncategorized';
+                          if (!acc[cat]) acc[cat] = [];
+                          acc[cat].push(exam);
+                          return acc;
+                        }, {});
+
+                        return Object.keys(groupedExams).sort().map(category => (
+                          <div key={category} className="mb-8">
+                            <h3 className="title mb-4" style={{ fontSize: '1.5rem', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem' }}>{category}</h3>
+                            <div className="grid grid-cols-2">
+                              {groupedExams[category].map(exam => {
+                                const qCount = allQuestions.filter(q => q.examId === exam.id).length;
+                                
+                                // Check Scheduling status for Teacher display
+                                let scheduleStatus = "";
+                                const now = new Date().getTime();
+                                if (exam.openDate && new Date(exam.openDate).getTime() > now) {
+                                  scheduleStatus = "Opens Later";
+                                } else if (exam.closeDate && new Date(exam.closeDate).getTime() < now) {
+                                  scheduleStatus = "Closed";
+                                }
+
+                                return (
+                                  <div key={exam.id} className="exam-card">
+                                    <div className="mb-2">
+                                      <h3 className="subtitle font-bold" style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3, fontSize: '14px' }} title={exam.title}>
+                                        {exam.title}
+                                      </h3>
+                                    </div>
+                                    <div className="flex gap-2 items-center flex-wrap mb-3">
+                                      <span className={`status-badge ${exam.isActive !== false ? 'status-active' : 'status-draft'}`}>
+                                        {exam.isActive !== false ? 'Active' : 'Draft'}
+                                      </span>
+                                      <span className="status-badge" style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' }}>
+                                        {exam.assignToAll !== false ? 'All Students' : `${(exam.assignedStudentIds || []).length} Assigned`}
+                                      </span>
+                                      {scheduleStatus && (
+                                        <span className="status-badge" style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}>
+                                          <Clock size={10} style={{ display: 'inline', marginRight: '2px', marginBottom: '2px' }}/> {scheduleStatus}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex gap-1 flex-wrap mb-3 pb-3 justify-end" style={{ borderBottom: '1px solid #e2e8f0' }}>
+                                      <button onClick={() => { setSelectedExam(exam); setAdminView('analytics'); }} className="btn-icon" title="View Analytics"><BarChart size={16} /></button>
+                                      <button onClick={() => { setSelectedExam(exam); setPrintMode('student'); setAppState('print_exam'); }} className="btn-icon" title="Print PDF"><Printer size={16} /></button>
+                                      <button onClick={() => { setEditingExamDetails(exam); setAdminView('edit_exam_details'); }} className="btn-icon" title="Edit Exam Details"><Edit2 size={16} /></button>
+                                      <button onClick={() => duplicateExam(exam)} className="btn-icon" title="Duplicate Exam"><Copy size={16} /></button>
+                                      <button onClick={() => deleteExam(exam.id)} className="btn-icon btn-icon-danger" title="Delete Exam"><Trash2 size={16} /></button>
+                                    </div>
+                                    <p className="text-muted line-clamp-2" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
+                                    <div className="exam-meta">
+                                      <div className="flex items-center gap-2"><LayoutGrid size={14}/> {qCount} Questions</div>
+                                      <div className="flex items-center gap-2"><Clock size={14}/> {exam.timeLimit} Min</div>
+                                    </div>
+                                    <button onClick={() => { setSelectedExam(exam); setAdminView('manage_questions'); }} className="btn btn-secondary w-full">Manage Questions</button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ));
+                      })()
+                    )}
+                  </>
+                )}
+
+                {/* --- NEW STUDENT MANAGEMENT TAB --- */}
+                {adminView === 'manage_students' && (
+                  <div className="container-sm mx-auto" style={{ margin: '0 auto', maxWidth: '40rem' }}>
+                     <button onClick={() => { setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Dashboard</button>
+                     <div className="mb-6">
+                       <h1 className="title">Manage Students</h1>
+                       <p className="text-muted">Approve new registrations and manage student access.</p>
+                     </div>
+
+                     {/* Pending Approvals Section */}
+                     <div className="card mb-8" style={{ padding: 0, overflow: 'hidden' }}>
+                        <div className="card-header" style={{ margin: 0, borderRadius: 0, padding: '1rem 1.5rem', textAlign: 'left', background: '#fffbeb', borderBottom: '1px solid #fde68a', color: '#b45309' }}>
+                          <h3 className="subtitle flex items-center gap-2 m-0"><UserPlus size={20}/> Pending Approvals ({pendingApprovalCount})</h3>
+                        </div>
+                        {pendingApprovalCount === 0 ? (
+                          <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No students are waiting for approval.</div>
+                        ) : (
+                          studentProfiles.filter(s => s.status === 'pending_approval').map(student => (
+                            <div key={student.id} className="admin-list-item flex justify-between items-center" style={{ borderBottom: '1px solid #fde68a', background: '#fefbf3' }}>
+                              <div>
+                                <span className="font-bold block">{student.name}</span>
+                                <span className="text-sm text-muted">{student.email}</span>
+                              </div>
+                              <div className="flex gap-2 shrink-0">
+                                <button onClick={async () => {
+                                   await updateDoc(doc(db, `artifacts/${appId}/public/data/studentProfiles/${student.id}`), { status: 'active' });
+                                }} className="btn btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}><UserCheck size={16}/> Approve</button>
+                                <button onClick={async () => {
+                                   if(window.confirm(`Are you sure you want to completely delete the registration request for ${student.name}?`)) {
+                                     await deleteDoc(doc(db, `artifacts/${appId}/public/data/studentProfiles/${student.id}`));
+                                   }
+                                }} className="btn btn-outline text-danger" style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', borderColor: '#fca5a5' }}><UserX size={16}/> Reject</button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                     </div>
+
+                     {/* Active Students Section */}
+                     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                        <div className="card-header" style={{ margin: 0, borderRadius: 0, padding: '1rem 1.5rem', textAlign: 'left', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#0f172a' }}>
+                          <h3 className="subtitle flex items-center gap-2 m-0"><Users size={20}/> Active Students</h3>
+                        </div>
+                        {studentProfiles.filter(s => s.status !== 'pending_approval').length === 0 ? (
+                          <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No active students found.</div>
+                        ) : (
+                          studentProfiles.filter(s => s.status !== 'pending_approval').map(student => (
+                            <div key={student.id} className="admin-list-item flex justify-between items-center">
+                              <div>
+                                <span className="font-bold block flex items-center gap-2">
+                                   {student.name}
+                                   {student.legacyMigrated && <span className="status-badge" style={{ fontSize: '9px', background: '#eff6ff', color: '#1e3a8a', borderColor: '#bfdbfe' }}>Legacy</span>}
+                                </span>
+                                <span className="text-sm text-muted">{student.email}</span>
+                              </div>
+                              <div className="flex gap-2 shrink-0">
+                                <button onClick={async () => {
+                                     if(window.confirm(`Revoke access for ${student.name}? They will need to be re-approved.`)) {
+                                       await updateDoc(doc(db, `artifacts/${appId}/public/data/studentProfiles/${student.id}`), { status: 'pending_approval' });
+                                     }
+                                }} className="btn-icon btn-icon-danger" title="Revoke Access"><UserX size={18}/></button>
+                                <button onClick={async () => {
+                                     if(window.confirm(`Are you sure you want to completely delete the account for ${student.name}? This action cannot be undone.`)) {
+                                       await deleteDoc(doc(db, `artifacts/${appId}/public/data/studentProfiles/${student.id}`));
+                                     }
+                                }} className="btn-icon btn-icon-danger" title="Delete Student"><Trash2 size={18}/></button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                     </div>
+                  </div>
+                )}
+
+                {adminView === 'manage_groups' && (
+                  <div className="container-sm mx-auto" style={{ margin: '0 auto', maxWidth: '40rem' }}>
+                     <button onClick={() => { setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Dashboard</button>
+                     <div className="mb-6">
+                       <h1 className="title">Manage Classes & Groups</h1>
+                       <p className="text-muted">Create groups of students to quickly assign exams.</p>
+                     </div>
+
+                     {!editingGroup ? (
+                       <>
+                         <div className="card mb-6">
+                           <form onSubmit={async (e) => {
+                             e.preventDefault();
+                             if(!newGroupName.trim()) return;
+                             try {
+                               await addDoc(collection(db, `artifacts/${appId}/public/data/studentGroups`), { name: newGroupName.trim(), studentIds: [] });
+                               setNewGroupName('');
+                             } catch(err) { console.error(err); }
+                           }} className="flex gap-4">
+                             <div className="input-group flex-1 mb-0">
+                               <input type="text" value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} className="input no-icon" placeholder="New Class (e.g. Period 1 Math)" />
+                             </div>
+                             <button type="submit" className="btn btn-primary" style={{ padding: '0.75rem 1rem' }}><Plus size={18} /> Add</button>
+                           </form>
+                         </div>
+                         
+                         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                            {studentGroupsList.length === 0 ? (
+                              <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No groups have been created yet.</div>
+                            ) : (
+                              studentGroupsList.map(group => (
+                                <div key={group.id} className="admin-list-item flex justify-between items-center">
+                                  <div>
+                                    <span className="font-bold block">{group.name}</span>
+                                    <span className="text-sm text-muted">{(group.studentIds || []).length} Students Enrolled</span>
+                                  </div>
+                                  <div className="flex gap-2 shrink-0">
+                                    <button onClick={() => setEditingGroup(group)} className="btn-icon"><Edit2 size={18} /></button>
+                                    <button onClick={async () => {
+                                      if(window.confirm(`Delete group "${group.name}"? Exams assigned to these students will not be unassigned.`)) {
+                                        await deleteDoc(doc(db, `artifacts/${appId}/public/data/studentGroups/${group.id}`));
+                                      }
+                                    }} className="btn-icon btn-icon-danger"><Trash2 size={18} /></button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                         </div>
+                       </>
+                     ) : (
+                       <div className="card">
+                         <div className="flex justify-between items-center mb-6">
+                           <h2 className="subtitle m-0">Edit Group: {editingGroup.name}</h2>
+                           <button onClick={() => setEditingGroup(null)} className="btn-icon"><X size={20}/></button>
+                         </div>
+                         
+                         <div className="input-group mb-6">
+                           <label className="label">Group Name</label>
+                           <input type="text" value={editingGroup.name} onChange={e => setEditingGroup({...editingGroup, name: e.target.value})} className="input no-icon" />
+                         </div>
+
+                         <div className="input-group mb-6">
+                           <label className="label mb-2">Select Enrolled Students</label>
+                           <div className="max-h-64 overflow-y-auto border border-slate-200 rounded p-2 bg-slate-50">
+                             {studentProfiles.length === 0 ? (
+                               <p className="text-sm text-muted p-2">No students registered yet.</p>
+                             ) : (
+                               studentProfiles.map(student => {
+                                 const isSelected = (editingGroup.studentIds || []).includes(student.studentId);
+                                 return (
+                                   <label key={student.studentId} className="flex items-center gap-3 p-2 hover:bg-slate-100 cursor-pointer rounded border-b border-slate-200 last:border-0">
+                                     <input type="checkbox" className="checkbox m-0 shrink-0" checked={isSelected} onChange={e => {
+                                       let currentIds = [...(editingGroup.studentIds || [])];
+                                       if (e.target.checked) currentIds.push(student.studentId);
+                                       else currentIds = currentIds.filter(id => id !== student.studentId);
+                                       setEditingGroup({...editingGroup, studentIds: currentIds});
+                                     }}/>
+                                     <div>
+                                       <div className="font-bold text-sm" style={{ color: isSelected ? '#1d4ed8' : '#0f172a' }}>{student.name}</div>
+                                       <div className="text-xs text-muted">{student.email}</div>
+                                     </div>
+                                   </label>
+                                 );
+                               })
+                             )}
+                           </div>
+                         </div>
+
+                         <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
+                           <button className="btn btn-outline" onClick={() => setEditingGroup(null)}>Cancel</button>
+                           <button className="btn btn-primary" onClick={async () => {
+                             try {
+                               await updateDoc(doc(db, `artifacts/${appId}/public/data/studentGroups/${editingGroup.id}`), {
+                                 name: editingGroup.name,
+                                 studentIds: editingGroup.studentIds || []
+                               });
+                               setEditingGroup(null);
+                             } catch(err) { console.error(err); }
+                           }}><Save size={18}/> Save Group</button>
+                         </div>
+                       </div>
+                     )}
+                  </div>
+                )}
+
+                {adminView === 'manage_topics' && (
+                  <div className="container-sm mx-auto" style={{ margin: '0 auto' }}>
+                     <button onClick={() => { setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Dashboard</button>
+                     <div className="mb-6">
+                       <h1 className="title">Manage Question Topics</h1>
+                       <p className="text-muted">Predefine categories for organizing individual questions.</p>
+                     </div>
+                     <div className="card mb-6">
+                       <form onSubmit={async (e) => {
+                         e.preventDefault();
+                         if(!newTopicName.trim()) return;
+                         try {
+                           await addDoc(collection(db, `artifacts/${appId}/public/data/topics`), { name: newTopicName.trim() });
+                           setNewTopicName('');
+                         } catch(err) { console.error(err); }
+                       }} className="flex gap-4">
+                         <div className="input-group flex-1 mb-0">
+                           <input type="text" value={newTopicName} onChange={e=>setNewTopicName(e.target.value)} className="input no-icon" placeholder="New Topic (e.g. Algebra I)" />
+                         </div>
+                         <button type="submit" className="btn btn-primary" style={{ padding: '0.75rem 1rem' }}><Plus size={18} /> Add</button>
+                       </form>
+                     </div>
+                     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                        {topicsList.length === 0 ? (
+                          <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No topics have been created yet.</div>
+                        ) : (
+                          topicsList.map(topic => (
+                            <div key={topic.id} className="admin-list-item flex justify-between items-center">
+                              {editingTopicId === topic.id ? (
+                                <div className="flex flex-1 gap-2 items-center">
+                                  <input type="text" value={editingTopicName} onChange={e => setEditingTopicName(e.target.value)} className="input no-icon flex-1" style={{ padding: '0.5rem 1rem' }} />
+                                  <button onClick={() => saveEditTopic(topic.id, topic.name)} className="btn-icon" style={{ color: '#22c55e' }}><Check size={18} /></button>
+                                  <button onClick={() => setEditingTopicId(null)} className="btn-icon"><X size={18} /></button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="font-bold">{topic.name}</span>
+                                  <div className="flex gap-2 shrink-0">
+                                    <button onClick={() => { setEditingTopicId(topic.id); setEditingTopicName(topic.name); }} className="btn-icon"><Edit2 size={18} /></button>
+                                    <button onClick={async () => {
+                                      if(window.confirm(`Delete topic "${topic.name}"?`)) {
+                                        await deleteDoc(doc(db, `artifacts/${appId}/public/data/topics/${topic.id}`));
+                                      }
+                                    }} className="btn-icon btn-icon-danger"><Trash2 size={18} /></button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          ))
+                        )}
+                     </div>
+                  </div>
+                )}
+
+                {adminView === 'manage_exam_categories' && (
+                  <div className="container-sm mx-auto" style={{ margin: '0 auto' }}>
+                     <button onClick={() => { setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Dashboard</button>
+                     <div className="mb-6">
+                       <h1 className="title">Manage Exam Categories</h1>
+                       <p className="text-muted">Create folders/categories to group your exams (e.g., "Midterms", "Homework").</p>
+                     </div>
+                     <div className="card mb-6">
+                       <form onSubmit={async (e) => {
+                         e.preventDefault();
+                         if(!newExamCategoryName.trim()) return;
+                         try {
+                           await addDoc(collection(db, `artifacts/${appId}/public/data/examCategories`), { name: newExamCategoryName.trim() });
+                           setNewExamCategoryName('');
+                         } catch(err) { console.error(err); }
+                       }} className="flex gap-4">
+                         <div className="input-group flex-1 mb-0">
+                           <input type="text" value={newExamCategoryName} onChange={e=>setNewExamCategoryName(e.target.value)} className="input no-icon" placeholder="New Category (e.g. Quizzes)" />
+                         </div>
+                         <button type="submit" className="btn btn-primary" style={{ padding: '0.75rem 1rem' }}><Plus size={18} /> Add</button>
+                       </form>
+                     </div>
+                     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                        {examCategoriesList.length === 0 ? (
+                          <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No exam categories have been created yet.</div>
+                        ) : (
+                          examCategoriesList.map(cat => (
+                            <div key={cat.id} className="admin-list-item flex justify-between items-center">
+                              {editingCategoryId === cat.id ? (
+                                <div className="flex flex-1 gap-2 items-center">
+                                  <input type="text" value={editingCategoryName} onChange={e => setEditingCategoryName(e.target.value)} className="input no-icon flex-1" style={{ padding: '0.5rem 1rem' }} />
+                                  <button onClick={() => saveEditCategory(cat.id, cat.name)} className="btn-icon" style={{ color: '#22c55e' }}><Check size={18} /></button>
+                                  <button onClick={() => setEditingCategoryId(null)} className="btn-icon"><X size={18} /></button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="font-bold">{cat.name}</span>
+                                  <div className="flex gap-2 shrink-0">
+                                    <button onClick={() => { setEditingCategoryId(cat.id); setEditingCategoryName(cat.name); }} className="btn-icon"><Edit2 size={18} /></button>
+                                    <button onClick={async () => {
+                                      if(window.confirm(`Delete category "${cat.name}"? Exams in this category will become Uncategorized.`)) {
+                                        await deleteDoc(doc(db, `artifacts/${appId}/public/data/examCategories/${cat.id}`));
+                                      }
+                                    }} className="btn-icon btn-icon-danger"><Trash2 size={18} /></button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          ))
+                        )}
+                     </div>
+                  </div>
+                )}
+
+                {adminView === 'analytics' && selectedExam && (
+                  <>
+                    <button onClick={() => { setSelectedExam(null); setAdminView('list_exams'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Exams</button>
+                    <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
+                      <div>
+                        <h1 className="title">Class Analytics</h1>
+                        <p className="text-muted">Viewing results for <strong>{selectedExam.title}</strong></p>
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const examResults = (Array.isArray(allResults) ? allResults : []).filter(r => r.examId === selectedExam.id);
+                      const avgScore = examResults.length ? Math.round(examResults.reduce((acc, r) => acc + (r.percentage || 0), 0) / examResults.length) : 0;
+                      
+                      return (
+                        <>
+                          <div className="grid grid-cols-2 mb-6">
+                            <div className="card text-center" style={{ padding: '1.5rem' }}>
+                              <div className="text-muted font-bold mb-2">AVERAGE SCORE</div>
+                              <div className={`text-4xl font-bold ${avgScore >= 80 ? 'text-success' : avgScore >= 50 ? 'text-warning' : 'text-danger'}`}>{avgScore}%</div>
+                            </div>
+                            <div className="card text-center" style={{ padding: '1.5rem' }}>
+                              <div className="text-muted font-bold mb-2">TOTAL SUBMISSIONS</div>
+                              <div className="text-4xl font-bold text-primary">{examResults.length}</div>
+                            </div>
+                          </div>
+
+                          {examResults.length === 0 ? (
+                            <div className="empty-state">No students have taken this exam yet.</div>
+                          ) : (
+                            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                              <div className="card-header" style={{ margin: 0, borderRadius: 0, padding: '1rem 1.5rem', textAlign: 'left' }}>
+                                <h3 className="subtitle" style={{ margin: 0 }}>Student Submissions</h3>
+                              </div>
+                              <div>
+                                {examResults.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map((result, idx) => (
+                                  <div key={idx} className="admin-list-item items-center justify-between">
+                                    <div>
+                                      <div className="font-bold">{result.studentName || 'Unknown Student'}</div>
+                                      <div className="text-muted" style={{ fontSize: '0.875rem' }}>Taken {new Date(result.timestamp || Date.now()).toLocaleString()}</div>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                      <div className="text-right">
+                                        <div className={`font-bold text-xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage || 0}%</div>
+                                        <div className="text-muted" style={{ fontSize: '0.75rem' }}>{result.score || 0} / {result.total || 0} pts</div>
+                                      </div>
+                                      <button onClick={() => { setSelectedStudentResult(result); setAdminView('student_review'); }} className="btn btn-outline" style={{ padding: '0.5rem 1rem' }}>
+                                        <Eye size={16} /> <span className="hidden-sm">Review</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </>
+                )}
+
+                {adminView === 'student_review' && selectedStudentResult && (
+                  <>
+                    <button onClick={() => { setSelectedStudentResult(null); setAdminView('analytics'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Analytics</button>
+                    <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
+                      <div>
+                        <h1 className="title">Review: {selectedStudentResult.studentName}</h1>
+                        <p className="text-muted">Viewing responses for <strong>{selectedExam.title}</strong></p>
+                      </div>
+                      <div className="text-right">
+                        <div className={`font-bold text-3xl ${selectedStudentResult.percentage >= 80 ? 'text-success' : selectedStudentResult.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{selectedStudentResult.percentage || 0}%</div>
+                        <div className="text-muted font-bold" style={{ fontSize: '0.875rem' }}>{selectedStudentResult.score || 0} / {selectedStudentResult.total || 0} correct</div>
+                      </div>
+                    </div>
+
+                    {!selectedStudentResult.answers && (
+                      <div className="error-message mb-6" style={{ background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' }}>
+                        <AlertTriangle size={20} style={{ display: 'inline-block', marginBottom: '-4px', marginRight: '8px' }} />
+                        Detailed response data is not available for this submission.
+                      </div>
+                    )}
+
+                    <div>
+                      {getExamQuestionsFromDB().map((q, idx) => {
+                        const userAnswer = selectedStudentResult.answers ? selectedStudentResult.answers[q.id] : undefined;
+                        const isCorrect = userAnswer === q.correctId;
+                        const isSkipped = userAnswer === undefined;
+                        
+                        return (
+                          <div key={q.id || idx} className="review-item">
+                            <div className={`review-header ${isCorrect ? 'correct' : isSkipped ? '' : 'incorrect'}`}>
+                              <div className={`review-icon ${isCorrect ? 'bg-success' : isSkipped ? 'bg-muted' : 'bg-danger'}`}>
+                                {isCorrect ? <Check size={16} /> : isSkipped ? <span style={{ fontSize: '1rem' }}>-</span> : <X size={16} />}
+                              </div>
+                              Question {idx + 1}: {isCorrect ? 'Correct' : isSkipped ? 'Skipped' : 'Incorrect'}
+                            </div>
+                            <div className="review-body">
+                              <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q?.topic || ''}</div>
+                              <div className="subtitle mb-4 math-scroll"><LatexText text={q?.text || ''} /></div>
+                              
+                              {q?.imageUrl && (
+                                <img src={q.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginBottom: '1.5rem', objectFit: 'contain', border: '1px solid #e2e8f0' }} />
+                              )}
+
+                              <div className="grid grid-cols-2 mb-6">
+                                {(Array.isArray(q?.options) ? q.options : []).map((opt, oIdx) => {
+                                  const isThisUserChoice = userAnswer === opt?.id;
+                                  const isThisCorrectChoice = q.correctId === opt?.id;
+                                  return (
+                                    <div key={opt?.id || oIdx} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
+                                      <div className="font-bold shrink-0">{opt?.id || '?'}.</div>
+                                      <div className="flex-1 math-scroll"><LatexText text={opt?.text || ''} /></div>
+                                      {isThisCorrectChoice && <Check size={18} className="shrink-0" />}
+                                      {isThisUserChoice && !isCorrect && <X size={18} className="shrink-0" />}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="review-explanation">
+                                <strong style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>Explanation</strong>
+                                <div className="math-scroll"><LatexText text={q?.explanation || 'No explanation provided.'} /></div>
+                                {q?.explanationImageUrl && (
+                                  <img src={q.explanationImageUrl} alt="Explanation Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginTop: '1rem', objectFit: 'contain', border: '1px solid #bfdbfe' }} />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {adminView === 'edit_exam_details' && editingExamDetails && (
+                  <div className="card container-sm" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div className="nav">
+                      <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Settings size={20} color="#2563eb" /> {editingExamDetails.isNew ? "Create Exam" : "Exam Settings"}
+                      </h2>
+                      <button onClick={() => { setEditingExamDetails(null); setAdminView('list_exams'); }} className="btn-icon"><X size={24} /></button>
+                    </div>
+                    <form onSubmit={saveExamDetails} style={{ padding: '2rem' }}>
+                      
+                      <div className="input-group mb-6">
+                        <label className="label">Exam Category</label>
+                        {examCategoriesList.length === 0 ? (
+                           <div style={{ padding: '0.75rem 1rem', background: '#fef2f2', color: '#ef4444', borderRadius: '0.75rem', fontSize: '0.875rem', border: '1px solid #fca5a5' }}>
+                             Please add categories in the 'Manage Categories' section before organizing exams. Uncategorized will be used by default.
+                           </div>
+                        ) : (
+                          <select value={editingExamDetails.category || ''} onChange={e => setEditingExamDetails({...editingExamDetails, category: e.target.value})} className="input no-icon">
+                            <option value="">Uncategorized</option>
+                            {examCategoriesList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                          </select>
+                        )}
+                      </div>
+
+                      <div className="input-group">
+                        <label className="label">Exam Title</label>
+                        <input required type="text" value={editingExamDetails.title} onChange={e => setEditingExamDetails({...editingExamDetails, title: e.target.value})} className="input no-icon" placeholder="e.g. Midterm Assessment" />
+                      </div>
+                      <div className="input-group">
+                        <label className="label">Description</label>
+                        <textarea required rows={3} value={editingExamDetails.description} onChange={e => setEditingExamDetails({...editingExamDetails, description: e.target.value})} className="input no-icon" placeholder="Provide instructions..." />
+                      </div>
+                      
+                      {/* Exam Scheduling Options */}
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="input-group mb-0">
+                          <label className="label">Open Date (Optional)</label>
+                          <input type="datetime-local" value={editingExamDetails.openDate || ''} onChange={e => setEditingExamDetails({...editingExamDetails, openDate: e.target.value})} className="input no-icon" style={{ paddingLeft: '1rem', fontSize: '0.875rem' }} />
+                        </div>
+                        <div className="input-group mb-0">
+                          <label className="label">Close Date (Optional)</label>
+                          <input type="datetime-local" value={editingExamDetails.closeDate || ''} onChange={e => setEditingExamDetails({...editingExamDetails, closeDate: e.target.value})} className="input no-icon" style={{ paddingLeft: '1rem', fontSize: '0.875rem' }} />
+                        </div>
+                      </div>
+
+                      <div className="input-group mb-8">
+                        <label className="label">Time Limit (Minutes)</label>
+                        <input required type="number" min="1" max="300" value={editingExamDetails.timeLimit} onChange={e => setEditingExamDetails({...editingExamDetails, timeLimit: e.target.value})} className="input no-icon" />
+                      </div>
+
+                      <label className="checkbox-wrapper">
+                        <input type="checkbox" checked={editingExamDetails.isActive !== false} onChange={e => setEditingExamDetails({...editingExamDetails, isActive: e.target.checked})} className="checkbox" />
+                        <div>
+                          <div style={{ fontWeight: 600, color: '#0f172a' }}>Active Status</div>
+                          <div style={{ fontSize: '0.875rem', color: '#64748b' }}>Uncheck to completely hide this exam from all students (Draft Mode).</div>
+                        </div>
+                      </label>
+
+                      {/* Targeted Assignment Logic */}
+                      <label className="checkbox-wrapper">
+                        <input type="checkbox" checked={editingExamDetails.assignToAll !== false} onChange={e => setEditingExamDetails({...editingExamDetails, assignToAll: e.target.checked})} className="checkbox" />
+                        <div>
+                          <div style={{ fontWeight: 600, color: '#0f172a' }}>Assign to All Students</div>
+                          <div style={{ fontSize: '0.875rem', color: '#64748b' }}>If checked, every registered student can see this exam.</div>
+                        </div>
+                      </label>
+
+                      {editingExamDetails.assignToAll === false && (
+                         <div className="card mb-8" style={{ background: '#f8fafc', boxShadow: 'none', border: '1px solid #cbd5e1' }}>
+                           <h4 className="subtitle mb-4">Assign to Specific Students</h4>
+                           
+                           {studentGroupsList.length > 0 && (
+                             <div className="mb-4 pb-4" style={{ borderBottom: '1px solid #e2e8f0' }}>
+                               <p className="text-sm text-muted mb-2 font-bold">Quick Select by Class/Group:</p>
+                               <div className="flex gap-2 flex-wrap">
+                                 {studentGroupsList.map(g => (
+                                   <button type="button" key={g.id} className="btn btn-outline" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem', background: 'white' }} onClick={() => {
+                                      const newIds = new Set(editingExamDetails.assignedStudentIds || []);
+                                      (g.studentIds || []).forEach(id => newIds.add(id));
+                                      setEditingExamDetails({...editingExamDetails, assignedStudentIds: Array.from(newIds)});
+                                   }}><Plus size={14}/> {g.name}</button>
+                                 ))}
+                                 <button type="button" className="btn btn-outline text-danger" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem', borderColor: '#fca5a5' }} onClick={() => setEditingExamDetails({...editingExamDetails, assignedStudentIds: []})}>Clear All</button>
+                               </div>
+                             </div>
+                           )}
+                           
+                           <div>
+                              <p className="text-sm text-muted mb-2 font-bold">Individual Students:</p>
+                              <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'white', border: '1px solid #e2e8f0', borderRadius: '0.5rem', padding: '0.5rem' }}>
+                                 {studentProfiles.length === 0 ? (
+                                   <p className="text-sm text-muted p-2">No students registered yet.</p>
+                                 ) : (
+                                   studentProfiles.map(student => (
+                                     <label key={student.studentId} className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer rounded" style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                       <input type="checkbox" className="checkbox m-0 shrink-0"
+                                         checked={(editingExamDetails.assignedStudentIds || []).includes(student.studentId)}
+                                         onChange={(e) => {
+                                           let current = [...(editingExamDetails.assignedStudentIds || [])];
+                                           if (e.target.checked) current.push(student.studentId);
+                                           else current = current.filter(id => id !== student.studentId);
+                                           setEditingExamDetails({...editingExamDetails, assignedStudentIds: current});
+                                         }}
+                                       />
+                                       <div>
+                                         <div className="font-bold text-sm" style={{ color: (editingExamDetails.assignedStudentIds || []).includes(student.studentId) ? '#1d4ed8' : '#0f172a' }}>{student.name}</div>
+                                         <div className="text-xs text-muted">{student.email}</div>
+                                       </div>
+                                     </label>
+                                   ))
+                                 )}
+                              </div>
+                           </div>
+                         </div>
+                      )}
+
+                      <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
+                        <button type="button" onClick={() => { setEditingExamDetails(null); setAdminView('list_exams'); }} className="btn btn-outline">Cancel</button>
+                        <button type="submit" className="btn btn-primary"><Save size={18} /> Save Exam</button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {adminView === 'manage_questions' && selectedExam && (
+                  <>
+                    <button onClick={() => { setSelectedExam(null); setAdminView('list_exams'); setAuthError(''); setAuthSuccess(''); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Exams</button>
+                    <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
+                      <div>
+                        <h1 className="title">{selectedExam.title} - Questions</h1>
+                        <p className="text-muted">Manage the questions for this specific assessment.</p>
+                      </div>
+                      <div className="flex gap-2 w-full-sm" style={{ flexWrap: 'wrap' }}>
+                        <button onClick={handleDownloadTemplate} className="btn btn-outline flex-1" title="Download CSV Template" style={{ margin: 0, justifyContent: 'center', whiteSpace: 'nowrap' }}>
+                          <Download size={18} /> <span className="hidden-sm">Template</span>
+                        </button>
+                        <input 
+                          type="file" 
+                          accept=".csv" 
+                          id="csv-upload" 
+                          style={{ display: 'none' }} 
+                          onChange={handleCSVUpload} 
+                        />
+                        <label htmlFor="csv-upload" className={`btn btn-outline flex-1 ${isUploadingCSV ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`} style={{ margin: 0, justifyContent: 'center', whiteSpace: 'nowrap' }}>
+                          <Upload size={18} /> <span className="hidden-sm">{isUploadingCSV ? 'Uploading...' : 'Import CSV'}</span>
+                        </label>
+                        <button onClick={() => { setBankSelection([]); setBankSearchQuery(''); setBankTopicFilter(''); setAdminView('question_bank'); }} className="btn btn-outline flex-1" style={{ whiteSpace: 'nowrap' }}>
+                          <Database size={18} /> <span className="hidden-sm">Question Bank</span>
+                        </button>
+                        <button onClick={openNewQuestion} className="btn btn-primary flex-1" style={{ whiteSpace: 'nowrap' }}>
+                          <Plus size={18} /> <span className="hidden-sm">Add Question</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {authError && <div className="error-message mb-4">{authError}</div>}
+                    {authSuccess && <div className="success-message mb-4">{authSuccess}</div>}
+
+                    {currentQuestions.length === 0 ? (
+                      <div className="empty-state">
+                        <LayoutGrid size={48} className="text-muted" style={{ margin: '0 auto 1rem auto', opacity: 0.5 }} />
+                        <h3 className="subtitle">No questions yet</h3>
+                        <p className="text-muted mb-6">Add your first question to this exam.</p>
+                        <button onClick={openNewQuestion} className="btn btn-outline">Create Question</button>
+                      </div>
+                    ) : (
+                      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                        {currentQuestions.map((q, idx) => (
+                          <div key={q.id} className="admin-list-item flex-col-sm">
+                            <div className="flex gap-4 flex-1 w-full-sm" style={{ minWidth: 0 }}>
+                              <div className="item-number">{idx + 1}</div>
+                              <div className="flex-1" style={{ minWidth: 0 }}>
+                                <div className="text-muted font-bold mb-2" style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>{q.topic}</div>
+                                <div className="math-scroll" style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '1rem' }}><LatexText text={q.text} /></div>
+                                {q?.imageUrl && <div className="mb-2 text-sm font-bold text-primary flex items-center gap-2"><ImageIcon size={16} /> Attached Question Image</div>}
+                                {q?.explanationImageUrl && <div className="mb-4 text-sm font-bold text-primary flex items-center gap-2"><ImageIcon size={16} /> Attached Explanation Image</div>}
+                                <div className="grid grid-cols-2 gap-2" style={{ fontSize: '0.875rem' }}>
+                                  {q.options.map(opt => (
+                                    <div key={opt.id} className="math-scroll" style={{ padding: '0.5rem', border: '1px solid', borderColor: q.correctId === opt.id ? '#bbf7d0' : '#e2e8f0', backgroundColor: q.correctId === opt.id ? '#f0fdf4' : 'white', borderRadius: '0.5rem', color: q.correctId === opt.id ? '#166534' : '#475569' }}>
+                                      <strong>{opt.id}.</strong> <LatexText text={opt.text} />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 shrink-0">
+                              <button onClick={() => { setEditingQuestion(q); setAdminView('edit_question'); }} className="btn-icon"><Edit2 size={20} /></button>
+                              <button onClick={() => deleteQuestion(q.id)} className="btn-icon btn-icon-danger"><Trash2 size={20} /></button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {adminView === 'question_bank' && selectedExam && (
+                  <>
+                    <button onClick={() => { setAdminView('manage_questions'); }} className="btn btn-outline mb-6"><ChevronLeft size={16} /> Back to Questions</button>
+                    <div className="flex justify-between items-center mb-6 flex-col-sm gap-4">
+                      <div>
+                        <h1 className="title">Global Question Bank</h1>
+                        <p className="text-muted">Select questions from other exams to copy into <strong>{selectedExam.title}</strong>.</p>
+                      </div>
+                      <button 
+                        onClick={importFromBank} 
+                        disabled={bankSelection.length === 0 || isUploadingCSV} 
+                        className="btn btn-primary w-full-sm"
+                      >
+                        <Plus size={18} /> {isUploadingCSV ? 'Importing...' : `Add ${bankSelection.length} Selected`}
+                      </button>
+                    </div>
+
+                    {/* --- NEW SEARCH BAR AND FILTER --- */}
+                    <div className="flex gap-4 mb-6 flex-col-sm">
+                      <div className="input-group flex-1 mb-0">
+                        <div className="input-wrapper">
+                          <Search size={18} className="input-icon" />
+                          <input 
+                            type="text" 
+                            value={bankSearchQuery} 
+                            onChange={e => setBankSearchQuery(e.target.value)} 
+                            className="input" 
+                            placeholder="Search text..." 
+                          />
+                        </div>
+                      </div>
+                      <div className="input-group mb-0 w-full-sm" style={{ width: '250px' }}>
+                        <select value={bankTopicFilter} onChange={e => setBankTopicFilter(e.target.value)} className="input no-icon">
+                           <option value="">All Topics</option>
+                           {topicsList.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {authError && <div className="error-message mb-4">{authError}</div>}
+
+                    {allQuestions.length === 0 ? (
+                       <div className="empty-state">The global question bank is currently empty.</div>
+                    ) : (() => {
+                      const filteredBankQuestions = allQuestions.filter(q => {
+                        if (q.examId === selectedExam.id) return false;
+                        if (bankTopicFilter && q.topic !== bankTopicFilter) return false;
+                        const searchLower = bankSearchQuery.toLowerCase();
+                        return (q.topic || '').toLowerCase().includes(searchLower) || 
+                               (q.text || '').toLowerCase().includes(searchLower);
+                      });
+
+                      return (
+                        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                          {allQuestions.filter(q => q.examId !== selectedExam.id).length === 0 ? (
+                             <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>All existing questions in the database are already in this exam!</div>
+                          ) : filteredBankQuestions.length === 0 ? (
+                             <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No questions match your search.</div>
+                          ) : (
+                            filteredBankQuestions.map((q) => {
+                              const isSelected = bankSelection.includes(q.id);
+                              const sourceExam = exams.find(e => e.id === q.examId);
+                              
+                              return (
+                                <div key={q.id} className="admin-list-item flex-col-sm" style={{ backgroundColor: isSelected ? '#eff6ff' : 'transparent', transition: '0.2s', cursor: 'pointer' }} onClick={() => {
+                                  if (isSelected) setBankSelection(bankSelection.filter(id => id !== q.id));
+                                  else setBankSelection([...bankSelection, q.id]);
+                                }}>
+                                  <div className="flex gap-4 flex-1 w-full-sm items-center" style={{ minWidth: 0 }}>
+                                    <div style={{ width: '1.5rem', height: '1.5rem', borderRadius: '0.25rem', border: '2px solid', borderColor: isSelected ? '#2563eb' : '#cbd5e1', backgroundColor: isSelected ? '#2563eb' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                      {isSelected && <Check size={14} color="white" />}
+                                    </div>
+                                    <div className="flex-1" style={{ minWidth: 0 }}>
+                                      <div className="text-muted font-bold mb-1" style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>
+                                        {q.topic} {sourceExam && <span style={{ fontWeight: 'normal', textTransform: 'none', marginLeft: '8px' }}>from: {sourceExam.title}</span>}
+                                      </div>
+                                      <div className="math-scroll" style={{ fontSize: '1rem', fontWeight: 500, margin: 0 }}><LatexText text={q.text} /></div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+
+                {adminView === 'edit_question' && editingQuestion && (
+                  <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div className="nav">
+                      <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Edit2 size={20} color="#2563eb" /> {editingQuestion.isNew ? "Create Question" : "Edit Question"}
+                      </h2>
+                      <button onClick={() => { setEditingQuestion(null); setAdminView('manage_questions'); }} className="btn-icon"><X size={24} /></button>
+                    </div>
+                    <form onSubmit={saveQuestion} style={{ padding: '2rem' }}>
+                      
+                      <div style={{ background: '#eff6ff', padding: '1rem', borderRadius: '0.75rem', marginBottom: '1.5rem', border: '1px solid #bfdbfe', fontSize: '0.875rem', color: '#1e3a8a', display: 'flex', gap: '0.75rem', alignItems: 'start' }}>
+                        <Calculator size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <div>
+                          <strong>Visual Math Editor Enabled:</strong> Click into the text boxes below. A virtual keyboard will appear allowing you to visually build math equations without needing to write code!
+                        </div>
+                      </div>
+
+                      <div className="admin-form-grid mb-6">
+                        <div className="input-group col-span-2">
+                          <label className="label">Topic / Category</label>
+                          {topicsList.length === 0 ? (
+                             <div style={{ padding: '0.75rem 1rem', background: '#fef2f2', color: '#ef4444', borderRadius: '0.75rem', fontSize: '0.875rem', border: '1px solid #fca5a5' }}>
+                               Please add topics in the 'Manage Topics' section before creating a question.
+                             </div>
+                          ) : (
+                            <select required value={editingQuestion.topic} onChange={e => setEditingQuestion({...editingQuestion, topic: e.target.value})} className="input no-icon">
+                              <option value="" disabled>Select a predefined topic</option>
+                              {topicsList.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                            </select>
+                          )}
+                        </div>
+                        
+                        {/* RESTORED: QUESTION IMAGE UPLOAD */}
+                        <div className="input-group col-span-2 p-4" style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '0.75rem' }}>
+                          <label className="label mb-2 flex items-center gap-2"><ImageIcon size={16}/> Question Image (Optional)</label>
+                          <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])} className="input no-icon" style={{ background: 'white', padding: '0.5rem' }} />
+                          {editingQuestion.imageUrl && !imageFile && (
+                            <div className="mt-3">
+                               <p className="text-sm flex items-center gap-2" style={{ color: '#2563eb' }}>
+                                 <Check size={14} /> Currently has an image attached. Uploading a new one will replace it.
+                               </p>
+                               <button type="button" onClick={() => { setEditingQuestion({...editingQuestion, imageUrl: ''}); setImageFile(null); }} className="btn btn-danger mt-2" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}><Trash2 size={14}/> Remove Existing Image</button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="input-group col-span-2">
+                          <label className="label">Question Text</label>
+                          <MathLiveInput 
+                            value={editingQuestion.text} 
+                            onChange={newText => setEditingQuestion({...editingQuestion, text: newText})}
+                            placeholder="What is the question?" 
+                          />
+                        </div>
+                        
+                        {editingQuestion.options.map((opt, i) => (
+                          <div className="input-group" key={opt.id}>
+                            <label className="label">Option {opt.id}</label>
+                            <div style={{ border: editingQuestion.correctId === opt.id ? '2px solid #22c55e' : 'none', borderRadius: '0.75rem', padding: editingQuestion.correctId === opt.id ? '2px' : '0' }}>
+                               <MathLiveInput 
+                                 value={opt.text} 
+                                 onChange={newText => { const newOpts = [...editingQuestion.options]; newOpts[i].text = newText; setEditingQuestion({...editingQuestion, options: newOpts}); }}
+                                 placeholder={`Option ${opt.id}`}
+                               />
+                            </div>
+                          </div>
+                        ))}
+                        
+                        <div className="input-group col-span-2" style={{ background: '#eff6ff', padding: '1rem', borderRadius: '0.75rem', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <label className="label" style={{ margin: 0, color: '#1e3a8a' }}>Correct Answer:</label>
+                          <select value={editingQuestion.correctId} onChange={e => setEditingQuestion({...editingQuestion, correctId: e.target.value})} className="input no-icon" style={{ width: 'auto', fontWeight: 'bold', color: '#1d4ed8', padding: '0.5rem 2rem 0.5rem 1rem' }}>
+                            <option value="A">Option A</option><option value="B">Option B</option><option value="C">Option C</option><option value="D">Option D</option>
+                          </select>
+                        </div>
+
+                        {/* RESTORED: EXPLANATION IMAGE UPLOAD */}
+                        <div className="input-group col-span-2 p-4" style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '0.75rem' }}>
+                          <label className="label mb-2 flex items-center gap-2"><ImageIcon size={16}/> Explanation Image (Optional)</label>
+                          <input type="file" accept="image/*" onChange={(e) => setExplanationImageFile(e.target.files[0])} className="input no-icon" style={{ background: 'white', padding: '0.5rem' }} />
+                          {editingQuestion.explanationImageUrl && !explanationImageFile && (
+                            <div className="mt-3">
+                               <p className="text-sm flex items-center gap-2" style={{ color: '#2563eb' }}>
+                                 <Check size={14} /> Currently has an image attached. Uploading a new one will replace it.
+                               </p>
+                               <button type="button" onClick={() => { setEditingQuestion({...editingQuestion, explanationImageUrl: ''}); setExplanationImageFile(null); }} className="btn btn-danger mt-2" style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}><Trash2 size={14}/> Remove Existing Image</button>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="input-group col-span-2 mb-0">
+                          <label className="label">Explanation Text (Shown after exam)</label>
+                          <MathLiveInput 
+                            value={editingQuestion.explanation} 
+                            onChange={newText => setEditingQuestion({...editingQuestion, explanation: newText})}
+                            placeholder="Explain why the answer is correct..." 
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
+                        <button type="button" onClick={() => { setEditingQuestion(null); setAdminView('manage_questions'); }} className="btn btn-outline" disabled={isUploadingImage}>Cancel</button>
+                        <button type="submit" className="btn btn-primary" disabled={isUploadingImage || topicsList.length === 0}>
+                          <Save size={18} /> {isUploadingImage ? 'Uploading Images...' : 'Save Question'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+              </div>
+            </main>
+          </div>
+        </div>
+      );
+    }
+
+    if (appState === 'home') {
+      const activeExams = exams.filter(e => {
+         if (e.isActive === false) return false;
+         if (e.assignToAll === false) {
+           return (e.assignedStudentIds || []).includes(activeSession?.studentId);
+         }
+         return true;
+      });
+
+      return (
+        <div className="min-h-screen">
+          <nav className="nav">
+            <div className="nav-brand"><Calculator color="#2563eb" size={24} /> Student Portal</div>
+            <div className="flex items-center gap-4">
+              <span className="badge hidden-sm"><User size={16} /> {activeSession?.name}</span>
+              <button onClick={() => { setAuthError(''); setAuthSuccess(''); setHomeView('change_password'); }} className="btn" style={{ padding: '0.5rem 1rem', background: 'rgba(37,99,235,0.1)', color: '#2563eb' }}>
+                <Key size={16} /> <span className="hidden-sm">Password</span>
+              </button>
+              <button onClick={handleLogout} className="btn btn-outline" style={{ padding: '0.5rem 1rem' }}><LogOut size={16} /> <span className="hidden-sm">Logout</span></button>
+            </div>
+          </nav>
+          <div className="container">
+            {homeView === 'change_password' ? (
+              <div className="card container-sm" style={{ padding: 0, overflow: 'hidden', margin: '0 auto' }}>
+                <div className="nav">
+                  <h2 className="subtitle" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Key size={20} color="#2563eb" /> Update Password
+                  </h2>
+                  <button onClick={() => setHomeView('dashboard')} className="btn-icon"><X size={24} /></button>
+                </div>
+                <form onSubmit={handleChangePassword} style={{ padding: '2rem' }}>
+                  {authError && <div className="error-message mb-4">{authError}</div>}
+                  {authSuccess && <div className="success-message mb-4">{authSuccess}</div>}
+                  <div className="input-group">
+                    <label className="label">New Password</label>
+                    <div className="input-wrapper">
+                      <Lock size={18} className="input-icon" />
+                      <input type="password" required minLength="6" value={passwordForm.newPassword} onChange={e => setPasswordForm({...passwordForm, newPassword: e.target.value})} className="input" placeholder="Enter new password" />
+                    </div>
+                  </div>
+                  <div className="input-group mb-8">
+                    <label className="label">Confirm New Password</label>
+                    <div className="input-wrapper">
+                      <Lock size={18} className="input-icon" />
+                      <input type="password" required minLength="6" value={passwordForm.confirmPassword} onChange={e => setPasswordForm({...passwordForm, confirmPassword: e.target.value})} className="input" placeholder="Confirm new password" />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 justify-end pt-4" style={{ borderTop: '1px solid #e2e8f0' }}>
+                    <button type="button" onClick={() => setHomeView('dashboard')} className="btn btn-outline">Cancel</button>
+                    <button type="submit" className="btn btn-primary"><Save size={18} /> Update Password</button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <>
+                <div className="mb-8">
+                  <h2 className="title flex items-center gap-3 mb-6"><BookOpen size={28} color="#2563eb" /> Available Assessments</h2>
+                  {activeExams.length === 0 ? (
+                    <div className="empty-state">No exams are currently available. Please check back later.</div>
+                  ) : (
+                    (() => {
+                      const groupedActiveExams = activeExams.reduce((acc, exam) => {
+                        const cat = exam.category || 'Uncategorized';
+                        if (!acc[cat]) acc[cat] = [];
+                        acc[cat].push(exam);
+                        return acc;
+                      }, {});
+
+                      return Object.keys(groupedActiveExams).sort().map(category => (
+                        <div key={category} className="mb-8">
+                          <h3 className="title mb-4" style={{ fontSize: '1.5rem', color: '#1e293b', borderBottom: '2px solid #e2e8f0', paddingBottom: '0.5rem' }}>{category}</h3>
+                          <div className="grid grid-cols-3">
+                            {groupedActiveExams[category].map(exam => {
+                              const qCount = allQuestions.filter(q => q.examId === exam.id).length;
+                              const now = new Date().getTime();
+                              let isLocked = false;
+                              let lockReason = "";
+                              
+                              if (exam.openDate && new Date(exam.openDate).getTime() > now) {
+                                isLocked = true;
+                                lockReason = `Opens ${new Date(exam.openDate).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+                              } else if (exam.closeDate && new Date(exam.closeDate).getTime() < now) {
+                                isLocked = true;
+                                lockReason = `Closed ${new Date(exam.closeDate).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+                              }
+
+                              return (
+                                <div key={exam.id} className={`exam-card ${isLocked ? 'opacity-75 grayscale border-gray-200' : ''}`}>
+                                  <h3 className="subtitle font-bold" style={{ marginBottom: '0.5rem', fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={exam.title}>{exam.title}</h3>
+                                  <p className="text-muted line-clamp-3" style={{ flex: 1, marginBottom: '1.5rem', fontSize: '0.875rem' }}>{exam.description}</p>
+                                  <div className="exam-meta">
+                                    <div className="flex items-center gap-2"><LayoutGrid size={14} color="#3b82f6"/> {qCount} Questions</div>
+                                    <div className="flex items-center gap-2"><Clock size={14} color="#3b82f6"/> {exam.timeLimit} Min</div>
+                                  </div>
+                                  {isLocked ? (
+                                    <button disabled className="btn btn-outline w-full status-locked"><Lock size={16}/> {lockReason}</button>
+                                  ) : (
+                                    <button onClick={() => selectExamForTaking(exam)} className="btn btn-outline w-full" style={{ borderColor: '#bfdbfe', color: '#1d4ed8' }}>Select Exam <ChevronRight size={16}/></button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ));
+                    })()
+                  )}
+                </div>
+                
+                <div className="card">
+                  <h2 className="title flex items-center gap-3 mb-6"><History size={28} color="#2563eb" /> Your Exam History</h2>
+                  {pastResults.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '2rem' }}>
+                      <Award size={32} className="text-muted" style={{ margin: '0 auto 0.5rem auto', opacity: 0.5 }} />
+                      <p>You haven't taken any exams yet.</p>
+                    </div>
+                  ) : (
+                    <div>
+                      {(Array.isArray(pastResults) ? pastResults : []).map(result => (
+                        <div key={result.id} className="history-item">
+                          <div className="flex items-center gap-4">
+                            <div className="history-icon"><Calendar size={20} /></div>
+                            <div>
+                              <p className="font-bold">{result.examTitle || 'Practice Exam'}</p>
+                              <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Taken on {new Date(result.timestamp || Date.now()).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <div className="text-right card" style={{ padding: '0.75rem 1rem', minWidth: '100px' }}>
+                            <p className={`font-bold text-2xl ${result.percentage >= 80 ? 'text-success' : result.percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{result.percentage || 0}%</p>
+                            <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{result.score || 0} / {result.total || 0}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (appState === 'exam_intro' && selectedExam) {
+      const qCount = getExamQuestionsFromDB().length;
+      return (
+        <div className="min-h-screen">
+          <nav className="nav">
+            <button onClick={() => { setSelectedExam(null); setAppState('home'); }} className="btn btn-outline" style={{ padding: '0.5rem 1rem' }}><ChevronLeft size={16} /> Back</button>
+          </nav>
+          <div className="flex-1 flex items-center justify-center p-4">
+            <div className="card text-center relative" style={{ maxWidth: '42rem', width: '100%', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '8px', background: 'linear-gradient(to right, #60a5fa, #4f46e5)' }}></div>
+              <h1 className="title mb-4" style={{ marginTop: '1rem' }}>{selectedExam.title}</h1>
+              <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>{selectedExam.description}</p>
+              
+              <div className="flex justify-center items-center gap-4 mb-8 flex-col-sm">
+                <div className="badge" style={{ padding: '1rem 2rem', fontSize: '1rem' }}><LayoutGrid size={20} color="#3b82f6"/> {qCount} Questions</div>
+                <div className="badge" style={{ padding: '1rem 2rem', fontSize: '1rem' }}><Clock size={20} color="#3b82f6"/> {selectedExam.timeLimit} Minutes</div>
+              </div>
+              
+              {qCount === 0 ? (
+                <button disabled className="btn btn-primary" style={{ padding: '1rem 2.5rem', fontSize: '1.125rem' }}>Exam Not Ready</button>
+              ) : (
+                <div className="grid grid-cols-2 mt-4">
+                  <div className="card" style={{ background: '#f8fafc', border: '2px solid #e2e8f0', boxShadow: 'none' }}>
+                    <Shuffle size={32} color="#2563eb" style={{ margin: '0 auto 1rem' }} />
+                    <h3 className="subtitle">Timed Exam</h3>
+                    <p className="text-muted mb-4" style={{ fontSize: '0.875rem' }}>Timer active. Questions and options are shuffled to prevent cheating. Score is saved.</p>
+                    <button onClick={() => startExam('timed')} className="btn btn-primary w-full">Start Exam</button>
+                  </div>
+                  <div className="card" style={{ background: '#fffbeb', border: '2px solid #fde68a', boxShadow: 'none' }}>
+                    <Lightbulb size={32} color="#d97706" style={{ margin: '0 auto 1rem' }} />
+                    <h3 className="subtitle">Study Mode</h3>
+                    <p className="text-muted mb-4" style={{ fontSize: '0.875rem' }}>No timer. Get immediate explanations after each answer. Score is not saved to history.</p>
+                    <button onClick={() => startExam('study')} className="btn btn-outline w-full" style={{ borderColor: '#fcd34d', color: '#b45309', background: '#fff' }}>Start Practice</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (appState === 'exam' && sessionQuestions[currentQIndex]) {
+      const currentQuestion = sessionQuestions[currentQIndex];
+      const hasAnsweredCurrent = answers[currentQuestion?.id] !== undefined;
+
+      return (
+        <div className="min-h-screen">
+          <header className="nav">
+            <div className="nav-brand flex-1">
+              {examMode === 'study' ? <Lightbulb color="#d97706" size={24}/> : <Calculator color="#2563eb" size={24}/>} 
+              <span className="hidden-sm">{selectedExam.title} {examMode === 'study' && '(Practice)'}</span>
+            </div>
+            {examMode === 'timed' && (
+              <div className={`timer mx-4 ${timeLeft < 300 ? 'urgent' : ''}`}><Clock size={18}/> {formatTime(timeLeft)}</div>
+            )}
+            <button className="btn btn-secondary" onClick={handleAttemptSubmit}>Finish</button>
+          </header>
+          
+          <main className="container flex-col" style={{ flex: 1 }}>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.25rem' }}>{currentQuestion?.topic || ''}</div>
+                <h2 className="subtitle text-muted">Question {currentQIndex + 1} of {sessionQuestions.length}</h2>
+              </div>
+            </div>
+            
+            <div className="question-box">
+              <div className="math-scroll" style={{ fontSize: '1.25rem', fontWeight: 500 }}><LatexText text={currentQuestion?.text || ''} /></div>
+              {currentQuestion?.imageUrl && (
+                 <img src={currentQuestion.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '0.5rem', objectFit: 'contain', border: '1px solid #e2e8f0', marginTop: '1rem' }} />
+              )}
+            </div>
+            
+            <div className="mb-8">
+              {(Array.isArray(currentQuestion?.options) ? currentQuestion.options : []).map((option, optIdx) => {
+                const isSelected = answers[currentQuestion?.id] === option?.id;
+                
+                // Extra styling for Study Mode
+                let studyModeClass = '';
+                if (examMode === 'study' && hasAnsweredCurrent) {
+                  if (option?.id === currentQuestion.correctId) studyModeClass = 'border-color: #22c55e; background: #f0fdf4;';
+                  else if (isSelected) studyModeClass = 'border-color: #ef4444; background: #fef2f2;';
+                  else studyModeClass = 'opacity: 0.5;';
+                }
+
+                return (
+                  <button 
+                    key={option?.id || optIdx} 
+                    onClick={() => handleSelectOption(option?.id)} 
+                    disabled={examMode === 'study' && hasAnsweredCurrent}
+                    className={`option-btn ${isSelected ? 'selected' : ''}`}
+                    style={studyModeClass ? { cssText: studyModeClass } : {}}
+                  >
+                    <div className="option-letter">{option?.id || '?'}</div>
+                    <div className="flex-1 math-scroll text-left"><LatexText text={option?.text || ''} /></div>
+                    {examMode === 'study' && hasAnsweredCurrent && option?.id === currentQuestion.correctId && <Check color="#166534" size={24} />}
+                    {examMode === 'study' && hasAnsweredCurrent && isSelected && option?.id !== currentQuestion.correctId && <X color="#991b1b" size={24} />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Study Mode Explanation Box */}
+            {examMode === 'study' && hasAnsweredCurrent && (
+              <div className="card mb-8" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
+                <h3 className="subtitle flex items-center gap-2 mb-2" style={{ color: '#b45309' }}><Lightbulb size={20} /> Explanation</h3>
+                <div className="math-scroll" style={{ color: '#92400e' }}><LatexText text={currentQuestion?.explanation || 'No explanation provided.'} /></div>
+                {currentQuestion?.explanationImageUrl && (
+                  <img src={currentQuestion.explanationImageUrl} alt="Explanation Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginTop: '1rem', objectFit: 'contain', border: '1px solid #fcd34d' }} />
+                )}
+              </div>
+            )}
+            
+            <div className="progress-nav flex-col-sm gap-4">
+              <button className="btn btn-outline w-full-sm" disabled={currentQIndex === 0} onClick={() => setCurrentQIndex(prev => prev - 1)}><ChevronLeft size={20}/> Previous</button>
+              
+              <div className="progress-grid hidden-sm">
+                {(Array.isArray(sessionQuestions) ? sessionQuestions : []).map((q, idx) => (
+                  <button key={q?.id || idx} onClick={() => setCurrentQIndex(idx)} className={`progress-dot ${currentQIndex === idx ? 'current' : ''} ${answers[q?.id] ? 'answered' : ''}`}>{idx + 1}</button>
+                ))}
+              </div>
+              
+              {currentQIndex === sessionQuestions.length - 1 ? (
+                <button className="btn btn-primary w-full-sm" onClick={handleAttemptSubmit}>Finish <Check size={20}/></button>
+              ) : (
+                <button className="btn btn-secondary w-full-sm" onClick={() => setCurrentQIndex(prev => prev + 1)}>Next <ChevronRight size={20}/></button>
+              )}
+            </div>
+          </main>
+
+          {showSubmitModal && (
+            <div className="modal-overlay">
+              <div className="modal-content">
+                <div className="flex items-center justify-center gap-4 mb-4 text-warning">
+                  <div className="card-header-icon" style={{ margin: 0, color: '#f59e0b', background: '#fef3c7', borderColor: '#fde68a' }}><AlertTriangle size={32} /></div>
+                </div>
+                <h3 className="title">Unanswered Questions</h3>
+                <p className="text-muted mb-8" style={{ fontSize: '1.125rem' }}>You have <strong style={{ color: '#0f172a' }}>{sessionQuestions.length - Object.keys(answers || {}).length}</strong> unanswered questions. Are you sure you want to finish?</p>
+                <div className="flex gap-3 justify-center flex-col-sm">
+                  <button onClick={() => setShowSubmitModal(false)} className="btn btn-outline w-full-sm">Return to Exam</button>
+                  <button onClick={finishExam} className="btn btn-primary w-full-sm">Finish Anyway</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (appState === 'results') {
+      const { score, percentage } = currentScore;
+      
+      // Calculate Topic Insights
+      const topicStats = {};
+      (Array.isArray(sessionQuestions) ? sessionQuestions : []).forEach(q => {
+        if (!q || !q.topic) return;
+        if (!topicStats[q.topic]) topicStats[q.topic] = { total: 0, correct: 0 };
+        topicStats[q.topic].total++;
+        if (answers[q.id] === q.correctId) topicStats[q.topic].correct++;
+      });
+
+      return (
+        <div className="min-h-screen">
+          <div className="container">
+            <div className="card text-center mb-8">
+              <h1 className="title mb-2">Exam Completed</h1>
+              <p className="text-muted mb-8">
+                {examMode === 'study' ? "You have finished this practice session." : `Your score for ${selectedExam.title} has been saved.`}
+              </p>
+              
+              <div className="result-circle">
+                <div className="result-score" style={{ color: percentage >= 80 ? '#22c55e' : percentage >= 50 ? '#f59e0b' : '#ef4444' }}>{score}</div>
+                <div className="text-muted font-bold">out of {sessionQuestions.length}</div>
+              </div>
+              
+              <h2 className={`title mb-8 ${percentage >= 80 ? 'text-success' : percentage >= 50 ? 'text-warning' : 'text-danger'}`}>{percentage}% Score</h2>
+              <button onClick={() => { setSelectedExam(null); setAppState('home'); }} className="btn btn-secondary">Return to Dashboard</button>
+            </div>
+
+            {/* Feature: Skill Breakdown (Topic Insights) */}
+            <h3 className="title mb-6 flex items-center gap-3"><BarChart size={24} color="#2563eb" /> Skill Breakdown</h3>
+            <div className="grid grid-cols-2 mb-8">
+              {Object.keys(topicStats).map(topic => {
+                const stat = topicStats[topic];
+                const topicPct = Math.round((stat.correct / stat.total) * 100);
+                return (
+                  <div key={topic} className="card" style={{ padding: '1.5rem' }}>
+                    <div className="flex justify-between items-center mb-2">
+                      <strong style={{ color: '#0f172a' }}>{topic}</strong>
+                      <span className="font-bold" style={{ color: topicPct >= 80 ? '#166534' : topicPct >= 50 ? '#b45309' : '#991b1b' }}>{topicPct}%</span>
+                    </div>
+                    <div className="text-muted" style={{ fontSize: '0.875rem' }}>{stat.correct} of {stat.total} correct</div>
+                    <div className="stat-bar-bg">
+                      <div className="stat-bar-fill" style={{ width: `${topicPct}%`, background: topicPct >= 80 ? '#22c55e' : topicPct >= 50 ? '#f59e0b' : '#ef4444' }}></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <h3 className="title mb-6 flex items-center gap-3"><BookOpen size={24} color="#2563eb" /> Detailed Review</h3>
+            <div>
+              {(Array.isArray(sessionQuestions) ? sessionQuestions : []).map((q, idx) => {
+                const userAnswer = answers[q?.id];
+                const isCorrect = userAnswer === q?.correctId;
+                const isSkipped = userAnswer === undefined;
+                
+                return (
+                  <div key={q?.id || idx} className="review-item">
+                    <div className={`review-header ${isCorrect ? 'correct' : isSkipped ? '' : 'incorrect'}`}>
+                      <div className={`review-icon ${isCorrect ? 'bg-success' : isSkipped ? 'bg-muted' : 'bg-danger'}`}>
+                        {isCorrect ? <Check size={16} /> : isSkipped ? <span style={{ fontSize: '1rem' }}>-</span> : <X size={16} />}
+                      </div>
+                      Question {idx + 1}: {isCorrect ? 'Correct' : isSkipped ? 'Skipped' : 'Incorrect'}
+                    </div>
+                    <div className="review-body">
+                      <div className="text-muted font-bold" style={{ color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem', marginBottom: '0.5rem' }}>{q?.topic || ''}</div>
+                      <div className="subtitle mb-6 math-scroll"><LatexText text={q.text} /></div>
+                      
+                      {/* Render uploaded image if it exists */}
+                      {q?.imageUrl && (
+                         <img src={q.imageUrl} alt="Question Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginBottom: '1.5rem', objectFit: 'contain', border: '1px solid #e2e8f0' }} />
+                      )}
+
+                      <div className="grid grid-cols-2 mb-6">
+                        {q.options.map(opt => {
+                          const isThisUserChoice = userAnswer === opt.id;
+                          const isThisCorrectChoice = q.correctId === opt.id;
+                          return (
+                            <div key={opt.id} className={`review-option ${isThisCorrectChoice ? 'is-correct' : (isThisUserChoice && !isCorrect ? 'is-wrong' : '')}`}>
+                              <div className="font-bold shrink-0">{opt.id}.</div>
+                              <div className="flex-1 math-scroll"><LatexText text={opt.text} /></div>
+                              {isThisCorrectChoice && <Check size={18} className="shrink-0" />}
+                              {isThisUserChoice && !isCorrect && <X size={18} className="shrink-0" />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="review-explanation">
+                        <strong style={{ textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', display: 'block', marginBottom: '0.5rem' }}>Explanation</strong>
+                        <div className="math-scroll"><LatexText text={q.explanation} /></div>
+                        {q?.explanationImageUrl && (
+                          <img src={q.explanationImageUrl} alt="Explanation Graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '0.5rem', marginTop: '1rem', objectFit: 'contain', border: '1px solid #bfdbfe' }} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <>
+      <style>{styles}</style>
+      {renderContent()}
+    </>
+  );
+}
