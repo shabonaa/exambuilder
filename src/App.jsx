@@ -1694,11 +1694,18 @@ export default function App() {
                             </span>
                             <span className="text-sm text-muted">{student.email}</span>
                           </div>
-                          <button onClick={async () => {
-                               if(window.confirm(`Revoke access for ${student.name}? They will need to be re-approved.`)) {
-                                 await updateDoc(doc(db, `artifacts/${appId}/public/data/studentProfiles/${student.id}`), { status: 'pending_approval' });
-                               }
-                          }} className="btn-icon btn-icon-danger" title="Revoke Access"><UserX size={18}/></button>
+                          <div className="flex gap-2 shrink-0">
+                            <button onClick={async () => {
+                                 if(window.confirm(`Revoke access for ${student.name}? They will need to be re-approved.`)) {
+                                   await updateDoc(doc(db, `artifacts/${appId}/public/data/studentProfiles/${student.id}`), { status: 'pending_approval' });
+                                 }
+                            }} className="btn-icon btn-icon-danger" title="Revoke Access"><UserX size={18}/></button>
+                            <button onClick={async () => {
+                                 if(window.confirm(`Are you sure you want to completely delete the account for ${student.name}? This action cannot be undone.`)) {
+                                   await deleteDoc(doc(db, `artifacts/${appId}/public/data/studentProfiles/${student.id}`));
+                                 }
+                            }} className="btn-icon btn-icon-danger" title="Delete Student"><Trash2 size={18}/></button>
+                          </div>
                         </div>
                       ))
                     )}
