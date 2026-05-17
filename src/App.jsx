@@ -879,16 +879,26 @@ export default function App() {
     setCurrentScore({ score, percentage });
 
     if (activeSession && activeSession.role === 'student' && user && examMode === 'timed') {
+      const resultData = {
+        examId: selectedExam.id,
+        examTitle: selectedExam.title,
+        studentId: activeSession.studentId,
+        studentName: activeSession.name,
+        score,
+        total: sessionQuestions.length,
+        percentage,
+        answers, // Saves their specific choices so teachers can review them
+        timestamp: Date.now()
+      };
+
       try {
+        // 1. Save to the student's personal history
         const resultsRef = collection(db, `artifacts/${appId}/users/${activeSession.studentId}/results`);
-        await addDoc(resultsRef, {
-          examId: selectedExam.id,
-          examTitle: selectedExam.title,
-          score,
-          total: sessionQuestions.length,
-          percentage,
-          timestamp: Date.now()
-        });
+        await addDoc(resultsRef, resultData);
+        
+        // 2. Save to the global results pool for Teacher Analytics
+        const allResultsRef = collection(db, `artifacts/${appId}/public/data/allResults`);
+        await addDoc(allResultsRef, resultData);
       } catch (err) {
         console.error("Error saving result:", err);
       }
